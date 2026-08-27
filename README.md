@@ -12,6 +12,7 @@ src/WebScrapper.Scraper/
 ├── Scrapers/WebDriverFactory.cs   # Chrome driver setup (persistent profile, headless toggle)
 ├── Scrapers/ResearchDashboardScraper.cs
 ├── Email/ResearchEmailSender.cs   # emails added/removed items as HTML tables via Gmail SMTP
+├── Email/WhatsAppNotifier.cs      # sends added/removed items via CallMeBot (free WhatsApp bridge)
 ├── Data/ResearchStateStore.cs     # persists the last-seen snapshot for diffing
 ├── appsettings.json                # non-secret config (target URL, timeouts)
 ├── appsettings.local.json.example  # copy to appsettings.local.json for credentials (gitignored)
@@ -111,6 +112,27 @@ Each poll only emails when something actually **changed** since the last poll: a
 4. Run as usual; each poll iteration that finds a change sends an email with "New Research Items" / "Removed Research Items" tables (only the sections that apply) and prints a confirmation to the console. No change → no email.
 
 Credentials can also be set via environment variables instead: `Email__SenderEmail` and `Email__SenderAppPassword`.
+
+## WhatsApp notifications (optional)
+
+Same added/removed changes can also go out as a WhatsApp message via [CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/) — a free, unofficial API that bridges to a personal WhatsApp number. Off by default (`WhatsApp.Enabled: false`).
+
+1. Save `+34 644 59 71 67` as a contact on your phone.
+2. From your phone, send it the WhatsApp message: `I allow callmebot to send me messages`
+3. It replies with your personal API key within a minute or two.
+4. In `appsettings.local.json`:
+   ```json
+   {
+     "WhatsApp": {
+       "Enabled": true,
+       "PhoneNumber": "91XXXXXXXXXX",
+       "ApiKey": "your-callmebot-api-key"
+     }
+   }
+   ```
+5. Run as usual — WhatsApp and email notifications fire independently and can be enabled together or separately.
+
+Note: CallMeBot is a community-run bridge (not an official WhatsApp/Meta product), with a modest daily message cap and no uptime guarantee — fine for personal alerts, not for anything critical.
 
 ### State and deduplication
 

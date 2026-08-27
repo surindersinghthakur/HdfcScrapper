@@ -14,6 +14,7 @@ var configuration = new ConfigurationBuilder()
 var settings = configuration.GetSection("Scraper").Get<ScraperSettings>()
     ?? throw new InvalidOperationException("Missing 'Scraper' configuration section.");
 var emailSettings = configuration.GetSection("Email").Get<EmailSettings>() ?? new EmailSettings();
+var whatsAppSettings = configuration.GetSection("WhatsApp").Get<WhatsAppSettings>() ?? new WhatsAppSettings();
 
 var statePath = Path.Combine(AppContext.BaseDirectory, "data", "research-state.json");
 var pollInterval = TimeSpan.FromMinutes(1);
@@ -28,18 +29,28 @@ void WaitForNextCycle(TimeSpan interval)
 
 void NotifyIfEnabled(string body)
 {
-    if (!emailSettings.Enabled)
+    if (emailSettings.Enabled)
     {
-        return;
+        try
+        {
+            ResearchEmailSender.SendNotification(emailSettings, body);
+        }
+        catch (Exception emailEx)
+        {
+            Console.WriteLine($"Failed to send notification email: {emailEx.Message}");
+        }
     }
 
-    try
+    if (whatsAppSettings.Enabled)
     {
-        ResearchEmailSender.SendNotification(emailSettings, body);
-    }
-    catch (Exception emailEx)
-    {
-        Console.WriteLine($"Failed to send notification email: {emailEx.Message}");
+        try
+        {
+            WhatsAppNotifier.SendNotification(whatsAppSettings, body);
+        }
+        catch (Exception waEx)
+        {
+            Console.WriteLine($"Failed to send WhatsApp notification: {waEx.Message}");
+        }
     }
 }
 
@@ -138,6 +149,19 @@ try
 
                     ResearchEmailSender.SendChanges(emailSettings, settings.ScrapeTarget, added, removed);
                     Console.WriteLine($"Emailed changes to {emailSettings.RecipientEmail}.");
+                }
+
+                if (whatsAppSettings.Enabled)
+                {
+                    try
+                    {
+                        WhatsAppNotifier.SendChanges(whatsAppSettings, settings.ScrapeTarget, added, removed);
+                        Console.WriteLine($"Sent WhatsApp update to {whatsAppSettings.PhoneNumber}.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to send WhatsApp update: {ex.Message}");
+                    }
                 }
 
                 ResearchStateStore.Save(statePath, currentByKey.Values);

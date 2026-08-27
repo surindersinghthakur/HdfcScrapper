@@ -42,6 +42,8 @@ dotnet run --project src/WebScrapper.Scraper
 
 Chrome opens (non-headless by default) so you can solve any CAPTCHA or 2FA manually — the session is cached in `chrome-profile/` so subsequent runs skip login. The process then polls indefinitely every 2 minutes (Ctrl+C to stop) — see [Polling loop](#polling-loop) below.
 
+For quick test runs, set `Scraper.MaxRows` (e.g. `5`) to cap how many rows are read per tab, and watch each row get printed to the console as it's scraped.
+
 ## Current target
 
 `https://investright.hdfcsec.com/dashboard/research?...` — HDFC Securities' research dashboard, behind a login (username/password, likely followed by an OTP step).

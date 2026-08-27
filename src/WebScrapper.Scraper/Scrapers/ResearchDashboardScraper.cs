@@ -121,7 +121,12 @@ public class ResearchDashboardScraper : IDisposable
         var pinnedRowsByIndex = _driver
             .FindElements(By.CssSelector("div.ag-pinned-left-cols-container div[role='row']"))
             .ToDictionary(row => row.GetAttribute("row-index") ?? string.Empty);
-        var centerRows = _driver.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row']"));
+        IReadOnlyList<IWebElement> centerRows = _driver.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row']"));
+
+        if (_settings.MaxRows is int maxRows)
+        {
+            centerRows = centerRows.Take(maxRows).ToList();
+        }
 
         var items = new List<ResearchItem>();
 
@@ -152,7 +157,7 @@ public class ResearchDashboardScraper : IDisposable
             var returnsCell = returnsCells[0];
             var returnsLines = returnsCell.FindElements(By.CssSelector("p.MuiTypography-root"));
 
-            items.Add(new ResearchItem
+            var item = new ResearchItem
             {
                 Category = nameLines.ElementAtOrDefault(0)?.Text,
                 Symbol = nameLines.ElementAtOrDefault(1)?.Text ?? string.Empty,
@@ -165,7 +170,10 @@ public class ResearchDashboardScraper : IDisposable
                 PotentialReturnPercent = returnsLines.ElementAtOrDefault(0)?.Text,
                 Duration = returnsLines.ElementAtOrDefault(1)?.Text,
                 Action = TryGetText(returnsCell, "button"),
-            });
+            };
+
+            Console.WriteLine($"  [{assetClassTabText}] {item.Symbol} | Reco Date: {item.Timestamp} | LTP: {item.Ltp} | Reco Price: {item.RecoPrice}");
+            items.Add(item);
         }
 
         return items;

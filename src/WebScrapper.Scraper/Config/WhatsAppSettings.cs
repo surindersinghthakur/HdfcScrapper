@@ -9,4 +9,9 @@ public class WhatsAppSettings
 
     /// <summary>Obtained by messaging CallMeBot's WhatsApp number once — see README.</summary>
     public string ApiKey { get; set; } = string.Empty;
+
+    /// <summary>"CallMeBot" (default, no extra browser needed) or "WebAutomation" (drives
+    /// web.whatsapp.com directly via a second persistent Chrome profile; needs a one-time
+    /// QR-code scan).</summary>
+    public string Method { get; set; } = "CallMeBot";
 }

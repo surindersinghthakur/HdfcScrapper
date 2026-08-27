@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using WebScrapper.Scraper.Config;
 using WebScrapper.Scraper.Data;
 using WebScrapper.Scraper.Email;
+using WebScrapper.Scraper.Models;
 using WebScrapper.Scraper.Scrapers;
 
 var configuration = new ConfigurationBuilder()
@@ -18,6 +19,11 @@ var whatsAppSettings = configuration.GetSection("WhatsApp").Get<WhatsAppSettings
 
 var statePath = Path.Combine(AppContext.BaseDirectory, "data", "research-state.json");
 var pollInterval = TimeSpan.FromMinutes(1);
+var useWhatsAppWeb = whatsAppSettings.Method.Equals("WebAutomation", StringComparison.OrdinalIgnoreCase);
+
+// Declared early (before the closures below capture it) but only actually created later,
+// after the market-hours gating, so a skip-day exit doesn't launch a second browser for nothing.
+WhatsAppWebNotifier? whatsAppWeb = null;
 
 void WaitForNextCycle(TimeSpan interval)
 {
@@ -25,6 +31,34 @@ void WaitForNextCycle(TimeSpan interval)
     var delayTask = Task.Delay(interval);
     var enterPressedTask = Task.Run(() => Console.ReadLine());
     Task.WaitAny(delayTask, enterPressedTask);
+}
+
+void SendWhatsAppIfEnabled(Action<WhatsAppWebNotifier> viaWeb, Action viaCallMeBot)
+{
+    if (!whatsAppSettings.Enabled)
+    {
+        return;
+    }
+
+    try
+    {
+        if (useWhatsAppWeb)
+        {
+            // Null if WebAutomation is configured but Ctrl+C fired before it was created below.
+            if (whatsAppWeb != null)
+            {
+                viaWeb(whatsAppWeb);
+            }
+        }
+        else
+        {
+            viaCallMeBot();
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Failed to send WhatsApp message: {ex.Message}");
+    }
 }
 
 void NotifyIfEnabled(string body)
@@ -41,17 +75,9 @@ void NotifyIfEnabled(string body)
         }
     }
 
-    if (whatsAppSettings.Enabled)
-    {
-        try
-        {
-            WhatsAppNotifier.SendNotification(whatsAppSettings, body);
-        }
-        catch (Exception waEx)
-        {
-            Console.WriteLine($"Failed to send WhatsApp notification: {waEx.Message}");
-        }
-    }
+    SendWhatsAppIfEnabled(
+        web => web.SendNotification(body),
+        () => WhatsAppNotifier.SendNotification(whatsAppSettings, body));
 }
 
 Console.CancelKeyPress += (_, e) =>
@@ -59,8 +85,35 @@ Console.CancelKeyPress += (_, e) =>
     e.Cancel = true; // handle shutdown ourselves so the notification email finishes first.
     Console.WriteLine("Stopping (Ctrl+C)...");
     NotifyIfEnabled($"HdfcSec scraper stopped by user (Ctrl+C) at {DateTime.Now}.");
+    whatsAppWeb?.Dispose();
     Environment.Exit(0);
 };
+
+if (args.Contains("--test-whatsapp"))
+{
+    Console.WriteLine("Test mode: sending a sample WhatsApp message from the existing data file (no HDFC login)...");
+    var testItems = ResearchStateStore.Load(statePath).Values.Take(2).ToList();
+
+    if (testItems.Count == 0)
+    {
+        Console.WriteLine($"No items found in {statePath} to test with — run a real scrape first.");
+        return;
+    }
+
+    if (useWhatsAppWeb)
+    {
+        using var testWhatsAppWeb = new WhatsAppWebNotifier(whatsAppSettings);
+        testWhatsAppWeb.EnsureLoggedIn();
+        testWhatsAppWeb.SendChanges(settings.ScrapeTarget, testItems, new List<ResearchItem>());
+    }
+    else
+    {
+        WhatsAppNotifier.SendChanges(whatsAppSettings, settings.ScrapeTarget, testItems, new List<ResearchItem>());
+    }
+
+    Console.WriteLine("Test message sent.");
+    return;
+}
 
 var marketOpen = TimeOnly.Parse(settings.MarketOpenTime);
 var marketClose = TimeOnly.Parse(settings.MarketCloseTime);
@@ -88,9 +141,15 @@ if (TimeOnly.FromDateTime(DateTime.Now) < marketOpen)
 
 using var scraper = new ResearchDashboardScraper(settings);
 
+if (whatsAppSettings.Enabled && useWhatsAppWeb)
+{
+    whatsAppWeb = new WhatsAppWebNotifier(whatsAppSettings);
+}
+
 try
 {
     scraper.Login();
+    whatsAppWeb?.EnsureLoggedIn();
 
     var overrideCloseTime = false;
     var consecutiveFailures = 0;
@@ -151,18 +210,9 @@ try
                     Console.WriteLine($"Emailed changes to {emailSettings.RecipientEmail}.");
                 }
 
-                if (whatsAppSettings.Enabled)
-                {
-                    try
-                    {
-                        WhatsAppNotifier.SendChanges(whatsAppSettings, settings.ScrapeTarget, added, removed);
-                        Console.WriteLine($"Sent WhatsApp update to {whatsAppSettings.PhoneNumber}.");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Failed to send WhatsApp update: {ex.Message}");
-                    }
-                }
+                SendWhatsAppIfEnabled(
+                    web => web.SendChanges(settings.ScrapeTarget, added, removed),
+                    () => WhatsAppNotifier.SendChanges(whatsAppSettings, settings.ScrapeTarget, added, removed));
 
                 ResearchStateStore.Save(statePath, currentByKey.Values);
             }
@@ -198,4 +248,8 @@ catch (Exception ex)
     Console.WriteLine($"[{DateTime.Now:T}] Scraper crashed: {ex}");
     NotifyIfEnabled($"HdfcSec scraper crashed at {DateTime.Now}:\n\n{ex}");
     throw;
+}
+finally
+{
+    whatsAppWeb?.Dispose();
 }

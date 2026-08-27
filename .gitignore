@@ -5,6 +5,7 @@ obj/
 
 ## Selenium / Chrome profile
 src/WebScrapper.Scraper/chrome-profile/
+src/WebScrapper.Scraper/whatsapp-profile/
 
 ## Local secrets - never commit real credentials
 appsettings.local.json

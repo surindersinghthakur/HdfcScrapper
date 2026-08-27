@@ -13,6 +13,8 @@ src/WebScrapper.Scraper/
 ├── Scrapers/ResearchDashboardScraper.cs
 ├── Email/ResearchEmailSender.cs   # emails added/removed items as HTML tables via Gmail SMTP
 ├── Email/WhatsAppNotifier.cs      # sends added/removed items via CallMeBot (free WhatsApp bridge)
+├── Email/WhatsAppWebNotifier.cs   # alternative: drives web.whatsapp.com directly
+├── Email/WhatsAppMessageBuilder.cs # shared message text, used by both WhatsApp senders
 ├── Data/ResearchStateStore.cs     # persists the last-seen snapshot for diffing
 ├── appsettings.json                # non-secret config (target URL, timeouts)
 ├── appsettings.local.json.example  # copy to appsettings.local.json for credentials (gitignored)
@@ -133,6 +135,20 @@ Same added/removed changes can also go out as a WhatsApp message via [CallMeBot]
 5. Run as usual — WhatsApp and email notifications fire independently and can be enabled together or separately.
 
 Note: CallMeBot is a community-run bridge (not an official WhatsApp/Meta product), with a modest daily message cap and no uptime guarantee — fine for personal alerts, not for anything critical.
+
+### Alternative: WhatsApp Web automation
+
+Set `WhatsApp.Method` to `"WebAutomation"` to send by driving [web.whatsapp.com](https://web.whatsapp.com) directly (`WhatsAppWebNotifier.cs`) instead of going through CallMeBot — no message cap, but it needs a **second**, independent Chrome profile (`whatsapp-profile/`, alongside `chrome-profile/`) kept logged in.
+
+- First run: a Chrome window opens to WhatsApp Web. Scan the QR code (WhatsApp app → Linked Devices → Link a Device), then press Enter in the console once you see your chat list. The session persists afterward like the HDFC one does.
+- Sends via WhatsApp's "click to chat" URL (`web.whatsapp.com/send?phone=...&text=...`), which pre-fills the message — the code still clicks Send itself.
+- The CSS selectors for the QR canvas / chat list / send button are based on commonly-documented WhatsApp Web patterns, not a live-inspected DOM (unlike the HDFC selectors, which were built by inspecting the real site together) — they may need adjusting after the first real test, the same way HDFC's did.
+
+**Test without touching HDFC at all:**
+```bash
+dotnet run --project src/WebScrapper.Scraper -- --test-whatsapp
+```
+This skips the whole login/scrape flow and sends the first 2 items already sitting in `data/research-state.json` as a WhatsApp message — useful for iterating on the Web-automation selectors without waiting on a real scrape cycle.
 
 ### State and deduplication
 

@@ -78,8 +78,17 @@ public static class ResearchEmailSender
           .Append("<th>Target Price</th><th>S/L</th><th>Profit%</th>")
           .Append("</tr>");
 
+        var previousInstrumentType = (string?)null;
+
         foreach (var item in items)
         {
+            var isFuture = string.Equals(item.InstrumentType, "Future", StringComparison.OrdinalIgnoreCase);
+            if (isFuture && !string.Equals(previousInstrumentType, "Future", StringComparison.OrdinalIgnoreCase))
+            {
+                sb.Append("<tr><td colspan='8' style='background:#dde1f0;font-weight:bold;text-align:center;padding:6px'>Futures</td></tr>");
+            }
+            previousInstrumentType = item.InstrumentType;
+
             var isSell = string.Equals(item.Action?.Trim(), "sell", StringComparison.OrdinalIgnoreCase);
             var rowStyle = isSell ? " style='background:#f8d7da'" : string.Empty;
 

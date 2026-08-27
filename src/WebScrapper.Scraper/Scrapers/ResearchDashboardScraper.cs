@@ -43,44 +43,15 @@ public class ResearchDashboardScraper : IDisposable
         var loginButton = _driver.FindElement(By.XPath("//button[@type='submit' and contains(., 'Login')]"));
         loginButton.Click();
 
-        // HDFC Securities may prompt for an OTP after this. Give plenty of time for
-        // manual entry in the (non-headless) browser window before giving up.
-        Console.WriteLine("If an OTP prompt appears, enter it in the browser window now...");
-        WaitForLoginToSettle();
-    }
-
-    /// <summary>
-    /// Waits for the URL to move off the login page AND stay unchanged for a few seconds.
-    /// A single "URL changed" check fires too early — clicking Login often lands on an
-    /// intermediate OTP page first, and moving on right then (e.g. navigating to the
-    /// dashboard while the user is still typing the OTP) interrupts that flow and bounces
-    /// back to the login page. Waiting for the URL to settle avoids that.
-    /// </summary>
-    private void WaitForLoginToSettle()
-    {
-        var deadline = DateTime.UtcNow.AddMinutes(3);
-        var settleTime = TimeSpan.FromSeconds(3);
-        string? lastUrl = null;
-        var lastChangeAt = DateTime.UtcNow;
-
-        while (DateTime.UtcNow < deadline)
-        {
-            var currentUrl = _driver.Url;
-
-            if (currentUrl != lastUrl)
-            {
-                lastUrl = currentUrl;
-                lastChangeAt = DateTime.UtcNow;
-            }
-            else if (currentUrl != _settings.LoginUrl && DateTime.UtcNow - lastChangeAt >= settleTime)
-            {
-                return;
-            }
-
-            Thread.Sleep(500);
-        }
-
-        throw new TimeoutException("Timed out waiting for login to complete.");
+        // Timing-based heuristics for "login is done" (URL changed, URL settled, etc.) are
+        // unreliable here: the OTP page itself doesn't navigate anywhere while it's waiting
+        // for input, so it looks "settled" almost immediately — well before the OTP has
+        // actually been entered and submitted. Moving on at that point (e.g. navigating to
+        // the dashboard) interrupts the OTP flow and bounces back to the login page. So
+        // instead of guessing, just wait for explicit confirmation.
+        Console.WriteLine("If an OTP prompt appears, complete it in the browser window.");
+        Console.WriteLine("Once you're fully logged in and see the dashboard, press Enter here to continue...");
+        Console.ReadLine();
     }
 
     /// <summary>

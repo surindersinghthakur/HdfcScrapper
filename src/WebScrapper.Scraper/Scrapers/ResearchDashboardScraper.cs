@@ -32,14 +32,18 @@ public class ResearchDashboardScraper : IDisposable
             return;
         }
 
+        Console.WriteLine($"Navigating to login page: {_settings.LoginUrl}");
         _driver.Navigate().GoToUrl(_settings.LoginUrl);
 
+        Console.WriteLine("Filling username...");
         var usernameField = _wait.Until(d => d.FindElement(By.Id("name")));
         usernameField.SendKeys(_settings.Username);
 
+        Console.WriteLine("Filling password...");
         var passwordField = _driver.FindElement(By.Id("password"));
         passwordField.SendKeys(_settings.Password);
 
+        Console.WriteLine("Clicking Login button...");
         var loginButton = _driver.FindElement(By.XPath("//button[@type='submit' and contains(., 'Login')]"));
         loginButton.Click();
 
@@ -67,6 +71,7 @@ public class ResearchDashboardScraper : IDisposable
     /// </summary>
     public List<ResearchItem> ScrapeResearch()
     {
+        Console.WriteLine($"Navigating to research dashboard: {_settings.TargetUrl}");
         _driver.Navigate().GoToUrl(_settings.TargetUrl);
 
         var items = new List<ResearchItem>();
@@ -95,15 +100,18 @@ public class ResearchDashboardScraper : IDisposable
     /// </summary>
     private List<ResearchItem> ScrapeAssetClassTab(string assetClassTabText)
     {
+        Console.WriteLine($"Clicking '{assetClassTabText}' tab...");
         // Top-level asset-class tab, must be selected before the Live/Closed sub-tabs appear.
         var assetTab = _wait.Until(d => d.FindElement(By.XPath($"//button[@role='tab' and contains(., '{assetClassTabText}')]")));
         assetTab.Click();
 
+        Console.WriteLine("Clicking 'Live' sub-tab...");
         // The "Live" tab's label includes a dynamic count, e.g. "Live (1)", so match on
         // partial text rather than the full label.
         var liveTab = _wait.Until(d => d.FindElement(By.XPath("//button[@role='tab' and contains(., 'Live')]")));
         liveTab.Click();
 
+        Console.WriteLine("Waiting for grid rows to render...");
         // Wait for the actual cells, not just the row containers: ag-Grid inserts row divs
         // before populating their cells, so checking row count alone is a race condition.
         // If the Live table is empty, there's nothing to wait for — time out gracefully
@@ -118,64 +126,81 @@ public class ResearchDashboardScraper : IDisposable
             return new List<ResearchItem>();
         }
 
+        // Grouped (not ToDictionary) because ag-Grid can include non-data rows (e.g. a
+        // full-width loading/overlay row) that share an empty row-index — ToDictionary would
+        // throw on the duplicate key and abort before a single row gets extracted.
         var pinnedRowsByIndex = _driver
             .FindElements(By.CssSelector("div.ag-pinned-left-cols-container div[role='row']"))
-            .ToDictionary(row => row.GetAttribute("row-index") ?? string.Empty);
+            .GroupBy(row => row.GetAttribute("row-index") ?? string.Empty)
+            .ToDictionary(g => g.Key, g => g.First());
         IReadOnlyList<IWebElement> centerRows = _driver.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row']"));
+
+        Console.WriteLine($"Found {pinnedRowsByIndex.Count} pinned row(s), {centerRows.Count} center row(s).");
 
         if (_settings.MaxRows is int maxRows)
         {
             centerRows = centerRows.Take(maxRows).ToList();
+            Console.WriteLine($"Capped to first {centerRows.Count} row(s) (MaxRows={maxRows}).");
         }
 
         var items = new List<ResearchItem>();
 
         foreach (var centerRow in centerRows)
         {
-            if (!pinnedRowsByIndex.TryGetValue(centerRow.GetAttribute("row-index") ?? string.Empty, out var pinnedRow))
+            try
             {
-                continue;
+                if (!pinnedRowsByIndex.TryGetValue(centerRow.GetAttribute("row-index") ?? string.Empty, out var pinnedRow))
+                {
+                    continue;
+                }
+
+                var scripNameCells = pinnedRow.FindElements(By.CssSelector("[col-id='scripName']"));
+                var ltpCells = centerRow.FindElements(By.CssSelector("[col-id='ltp']"));
+                var returnsCells = centerRow.FindElements(By.CssSelector("[col-id='potentialReturns']"));
+
+                if (scripNameCells.Count == 0 || ltpCells.Count == 0 || returnsCells.Count == 0)
+                {
+                    // Row div exists but ag-Grid hasn't finished populating its cells yet; skip it
+                    // rather than crash — a re-run (or a longer wait upstream) will pick it up.
+                    continue;
+                }
+
+                var nameLines = scripNameCells[0].FindElements(By.CssSelector("p.MuiTypography-root"));
+                var ltpLines = ltpCells[0].FindElements(By.CssSelector("p.MuiTypography-root"));
+
+                var recoPrice = centerRow.FindElements(By.CssSelector("[col-id='recoPrice'] p.MuiTypography-root"))
+                    .FirstOrDefault()?.Text;
+
+                var returnsCell = returnsCells[0];
+                var returnsLines = returnsCell.FindElements(By.CssSelector("p.MuiTypography-root"));
+
+                var item = new ResearchItem
+                {
+                    Category = nameLines.ElementAtOrDefault(0)?.Text,
+                    Symbol = nameLines.ElementAtOrDefault(1)?.Text ?? string.Empty,
+                    Details = nameLines.ElementAtOrDefault(2)?.Text,
+                    Timestamp = nameLines.ElementAtOrDefault(3)?.Text,
+                    Ltp = ltpLines.ElementAtOrDefault(0)?.Text,
+                    Change = ltpLines.ElementAtOrDefault(1)?.Text,
+                    ChangePercent = ltpLines.ElementAtOrDefault(2)?.Text,
+                    RecoPrice = recoPrice,
+                    PotentialReturnPercent = returnsLines.ElementAtOrDefault(0)?.Text,
+                    Duration = returnsLines.ElementAtOrDefault(1)?.Text,
+                    Action = TryGetText(returnsCell, "button"),
+                };
+
+                Console.WriteLine($"  [{assetClassTabText}] {item.Symbol} | Reco Date: {item.Timestamp} | LTP: {item.Ltp} | Reco Price: {item.RecoPrice}");
+                items.Add(item);
             }
-
-            var scripNameCells = pinnedRow.FindElements(By.CssSelector("[col-id='scripName']"));
-            var ltpCells = centerRow.FindElements(By.CssSelector("[col-id='ltp']"));
-            var returnsCells = centerRow.FindElements(By.CssSelector("[col-id='potentialReturns']"));
-
-            if (scripNameCells.Count == 0 || ltpCells.Count == 0 || returnsCells.Count == 0)
+            catch (StaleElementReferenceException)
             {
-                // Row div exists but ag-Grid hasn't finished populating its cells yet; skip it
-                // rather than crash — a re-run (or a longer wait upstream) will pick it up.
-                continue;
+                // ag-Grid recycled this row's DOM node mid-read (e.g. a live price update);
+                // skip it rather than aborting the whole tab.
+                Console.WriteLine("  Skipped a row: it was recycled by the grid while reading.");
             }
-
-            var nameLines = scripNameCells[0].FindElements(By.CssSelector("p.MuiTypography-root"));
-            var ltpLines = ltpCells[0].FindElements(By.CssSelector("p.MuiTypography-root"));
-
-            var recoPrice = centerRow.FindElements(By.CssSelector("[col-id='recoPrice'] p.MuiTypography-root"))
-                .FirstOrDefault()?.Text;
-
-            var returnsCell = returnsCells[0];
-            var returnsLines = returnsCell.FindElements(By.CssSelector("p.MuiTypography-root"));
-
-            var item = new ResearchItem
-            {
-                Category = nameLines.ElementAtOrDefault(0)?.Text,
-                Symbol = nameLines.ElementAtOrDefault(1)?.Text ?? string.Empty,
-                Details = nameLines.ElementAtOrDefault(2)?.Text,
-                Timestamp = nameLines.ElementAtOrDefault(3)?.Text,
-                Ltp = ltpLines.ElementAtOrDefault(0)?.Text,
-                Change = ltpLines.ElementAtOrDefault(1)?.Text,
-                ChangePercent = ltpLines.ElementAtOrDefault(2)?.Text,
-                RecoPrice = recoPrice,
-                PotentialReturnPercent = returnsLines.ElementAtOrDefault(0)?.Text,
-                Duration = returnsLines.ElementAtOrDefault(1)?.Text,
-                Action = TryGetText(returnsCell, "button"),
-            };
-
-            Console.WriteLine($"  [{assetClassTabText}] {item.Symbol} | Reco Date: {item.Timestamp} | LTP: {item.Ltp} | Reco Price: {item.RecoPrice}");
-            items.Add(item);
         }
 
+        Console.WriteLine($"Extracted {items.Count} item(s) from {assetClassTabText}.");
         return items;
     }
 

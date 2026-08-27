@@ -158,6 +158,7 @@ public class ResearchDashboardScraper : IDisposable
         }
 
         var items = new List<ResearchItem>();
+        var debugDumped = false;
 
         foreach (var centerRow in centerRows)
         {
@@ -197,6 +198,14 @@ public class ResearchDashboardScraper : IDisposable
                     // Row div exists but ag-Grid hasn't finished populating its cells yet; skip it
                     // rather than crash — a re-run (or a longer wait upstream) will pick it up.
                     Console.WriteLine($"  Skipped row-index={rowIndex}: cells not ready (scripName={scripNameCells.Count}, ltp={ltpCells.Count}, returns={returnsCells.Count}).");
+
+                    if (!debugDumped)
+                    {
+                        debugDumped = true;
+                        Console.WriteLine($"  DEBUG center row outerHTML: {centerRow.GetAttribute("outerHTML")}");
+                        Console.WriteLine($"  DEBUG pinned row outerHTML: {pinnedRow.GetAttribute("outerHTML")}");
+                    }
+
                     continue;
                 }
 

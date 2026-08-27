@@ -121,7 +121,7 @@ public class ResearchDashboardScraper : IDisposable
         // how long we waited or retried. Scope every subsequent query to the one grid whose
         // headers include "scripName", which is unique to the research table.
         var gridRoot = _wait.Until(d => d.FindElement(
-            By.XPath("//div[contains(@class,'ag-root-wrapper')][.//*[@col-id='scripName']]")));
+            By.XPath("//div[contains(@class,'ag-root') and @role='treegrid'][.//*[@col-id='scripName']]")));
 
         var items = ScrapeCurrentGridState(gridRoot, assetClassTabText);
 
@@ -138,7 +138,7 @@ public class ResearchDashboardScraper : IDisposable
             // tab click — give it more room than the usual TimeoutSeconds before giving up.
             var longWait = new WebDriverWait(_driver, TimeSpan.FromSeconds(Math.Max(_settings.TimeoutSeconds, 60)));
             gridRoot = longWait.Until(d => d.FindElement(
-                By.XPath("//div[contains(@class,'ag-root-wrapper')][.//*[@col-id='scripName']]")));
+                By.XPath("//div[contains(@class,'ag-root') and @role='treegrid'][.//*[@col-id='scripName']]")));
             items.AddRange(ScrapeCurrentGridState(gridRoot, assetClassTabText));
         }
 
@@ -422,7 +422,7 @@ public class ResearchDashboardScraper : IDisposable
         _wait.Until(d => d.FindElement(By.XPath("//button[@role='tab' and contains(., 'Live')]"))).Click();
 
         var gridRoot = _wait.Until(d => d.FindElement(
-            By.XPath("//div[contains(@class,'ag-root-wrapper')][.//*[@col-id='scripName']]")));
+            By.XPath("//div[contains(@class,'ag-root') and @role='treegrid'][.//*[@col-id='scripName']]")));
 
         var scripNameCell = FindScripNameCellBySymbol(gridRoot, item.Symbol);
         if (scripNameCell == null)

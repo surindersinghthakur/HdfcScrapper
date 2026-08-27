@@ -407,7 +407,7 @@ public class ResearchDashboardScraper : IDisposable
         {
             var match = gridRoot
                 .FindElements(By.CssSelector("div.ag-pinned-left-cols-container [col-id='scripName']"))
-                .FirstOrDefault(cell => cell.FindElements(By.CssSelector("p.MuiTypography-root")).ElementAtOrDefault(1)?.Text == symbol);
+                .FirstOrDefault(cell => ParseScripNameLines(cell.FindElements(By.CssSelector("p.MuiTypography-root"))).Symbol == symbol);
 
             if (match != null)
             {

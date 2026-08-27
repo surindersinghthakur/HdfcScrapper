@@ -88,9 +88,12 @@ public static class ResearchEmailSender
 
             // Diff% = how LTP has moved from the reco price. Profit% = remaining upside to
             // target, relative to target (positive = more room to grow; negative only once LTP
-            // has overshot the target).
+            // has overshot the target). For a Sell/short call, profit comes from price falling
+            // toward target instead of rising, so the direction flips.
             var diffPercent = ltp is double l1 && recoPrice is double r && r != 0 ? (l1 - r) / r * 100 : (double?)null;
-            var profitPercent = ltp is double l2 && targetPrice is double t && t != 0 ? (t - l2) / t * 100 : (double?)null;
+            var profitPercent = ltp is double l2 && targetPrice is double t && t != 0
+                ? (isSell ? (l2 - t) / t * 100 : (t - l2) / t * 100)
+                : (double?)null;
 
             sb.Append($"<tr{rowStyle}>")
               .Append($"<td>{Encode(item.Symbol)}</td>")

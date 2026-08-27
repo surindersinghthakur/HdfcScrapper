@@ -28,7 +28,6 @@ public static class ResearchEmailSender
     {
         "fno" => "F&O Added - HdfcSec",
         "stocks" => "Stock Added - HdfcSec",
-        "both" => "Stock/F&O Added - HdfcSec",
         _ => fallback,
     };
 
@@ -57,7 +56,7 @@ public static class ResearchEmailSender
         var sb = new StringBuilder();
         sb.Append("<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;font-family:sans-serif;font-size:14px'>");
         sb.Append("<tr style='background:#f2f2f2'>")
-          .Append("<th>Name</th><th>Reco Date</th><th>LTP</th><th>Reco Price</th><th>Scrap Date</th>")
+          .Append("<th>Name</th><th>Reco Date</th><th>Reco Price</th><th>LTP</th><th>Scrap Date</th>")
           .Append("</tr>");
 
         foreach (var item in items)
@@ -65,8 +64,8 @@ public static class ResearchEmailSender
             sb.Append("<tr>")
               .Append($"<td>{Encode(item.Symbol)}</td>")
               .Append($"<td>{Encode(item.Timestamp)}</td>")
-              .Append($"<td>{Encode(item.Ltp)}</td>")
               .Append($"<td>{Encode(item.RecoPrice)}</td>")
+              .Append($"<td>{Encode(item.Ltp)}</td>")
               .Append($"<td>{item.ScrapedAtUtc:u}</td>")
               .Append("</tr>");
         }

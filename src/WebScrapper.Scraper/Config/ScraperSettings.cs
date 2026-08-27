@@ -9,7 +9,7 @@ public class ScraperSettings
     public bool Headless { get; set; } = false;
     public int TimeoutSeconds { get; set; } = 30;
 
-    /// <summary>"FnO", "Stocks", or "Both" — which asset-class tab(s) to scrape.</summary>
+    /// <summary>"FnO" or "Stocks" — which asset-class tab to scrape.</summary>
     public string ScrapeTarget { get; set; } = "FnO";
 
     /// <summary>Cap on rows read per tab (null = no cap). Useful for fast test runs.</summary>

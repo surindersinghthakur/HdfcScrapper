@@ -60,43 +60,31 @@ public class ResearchDashboardScraper : IDisposable
 
     /// <summary>
     /// Navigates to the research dashboard and extracts research items from the Live sub-tab
-    /// of the F&amp;O and/or Stocks asset-class tabs, per <see cref="ScraperSettings.ScrapeTarget"/>.
-    /// The grid splits each row's cells across two DOM containers (pinned-left for the scrip
-    /// name column, center for the rest), so rows are matched up by their shared "row-index"
-    /// attribute. MUI's generated class names (mui-xxxxx) are unstable across builds, so
-    /// extraction relies on ag-Grid's stable "col-id" attributes and the fixed ordering of the
-    /// &lt;p&gt; text lines within each cell instead. NOTE: ag-Grid virtualizes rows, so only
-    /// rows currently scrolled into view are present in the DOM — scrolling the grid body
-    /// would be needed to collect more.
+    /// of the asset-class tab selected by <see cref="ScraperSettings.ScrapeTarget"/> ("FnO" or
+    /// "Stocks"). The grid splits each row's cells across two DOM containers (pinned-left for
+    /// the scrip name column, center for the rest), so rows are matched up by their shared
+    /// "row-index" attribute. MUI's generated class names (mui-xxxxx) are unstable across
+    /// builds, so extraction relies on ag-Grid's stable "col-id" attributes and the fixed
+    /// ordering of the &lt;p&gt; text lines within each cell instead. NOTE: ag-Grid virtualizes
+    /// rows, so only rows currently scrolled into view are present in the DOM — scrolling the
+    /// grid body would be needed to collect more.
     /// </summary>
     public List<ResearchItem> ScrapeResearch()
     {
         Console.WriteLine($"Navigating to research dashboard: {_settings.TargetUrl}");
         _driver.Navigate().GoToUrl(_settings.TargetUrl);
 
-        var items = new List<ResearchItem>();
+        var assetClassTabText = _settings.ScrapeTarget.Equals("Stocks", StringComparison.OrdinalIgnoreCase)
+            ? "Stocks"
+            : "F&O";
 
-        if (_settings.ScrapeTarget.Equals("FnO", StringComparison.OrdinalIgnoreCase) ||
-            _settings.ScrapeTarget.Equals("Both", StringComparison.OrdinalIgnoreCase))
-        {
-            items.AddRange(ScrapeAssetClassTab("F&O"));
-        }
-
-        if (_settings.ScrapeTarget.Equals("Stocks", StringComparison.OrdinalIgnoreCase) ||
-            _settings.ScrapeTarget.Equals("Both", StringComparison.OrdinalIgnoreCase))
-        {
-            items.AddRange(ScrapeAssetClassTab("Stocks"));
-        }
-
-        return items;
+        return ScrapeAssetClassTab(assetClassTabText);
     }
 
     /// <summary>
     /// Clicks the given top-level asset-class tab (e.g. "F&amp;O" or "Stocks"), then its "Live"
     /// sub-tab, and extracts the currently rendered ag-Grid rows. Both tabs share the same
-    /// structure. NOTE: when scraping "Both", switching tabs briefly leaves the previous tab's
-    /// rows in the DOM before ag-Grid re-renders — the cell-level wait below narrows this
-    /// window but can't fully eliminate it.
+    /// structure.
     /// </summary>
     private List<ResearchItem> ScrapeAssetClassTab(string assetClassTabText)
     {

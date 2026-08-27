@@ -52,7 +52,7 @@ Login happens once at startup:
 
 `Login()` fills the username (`#name`) and password (`#password`) fields and submits. If an OTP prompt appears, the (non-headless) Chrome window pauses for up to 2 minutes for you to enter it manually.
 
-Each poll then calls `ScrapeResearch()`, which — per `Scraper.ScrapeTarget` (`"FnO"` (default), `"Stocks"`, or `"Both"`) — scrapes one or both of the asset-class tabs. For each one, it:
+Each poll then calls `ScrapeResearch()`, which scrapes the asset-class tab selected by `Scraper.ScrapeTarget` (`"FnO"` (default) or `"Stocks"`):
 
 1. Clicks the top-level asset-class tab (**F&O** or **Stocks** — must be selected before its Live/Closed sub-tabs appear).
 2. Clicks the **Live** sub-tab (matched by partial text since its label includes a dynamic count, e.g. "Live (1)").
@@ -60,9 +60,7 @@ Each poll then calls `ScrapeResearch()`, which — per `Scraper.ScrapeTarget` (`
 
 The grid renders each row's cells across two DOM containers — a pinned-left container for the scrip name column, and a center container for LTP/Reco Price/Potential Returns — matched up by a shared `row-index` attribute. Extraction uses ag-Grid's stable `col-id` attributes and the fixed order of `<p>` text lines within each cell, since MUI's generated `mui-xxxxx` classes are unstable across builds.
 
-**Known limitations:**
-- ag-Grid virtualizes rows, so only rows currently scrolled into view exist in the DOM. `ScrapeResearch()` only reads what's rendered — scrolling the grid body would be needed to collect additional rows if the dashboard ever shows more than fit on screen.
-- With `ScrapeTarget: "Both"`, switching from one asset-class tab to the other briefly leaves the previous tab's rows in the DOM before ag-Grid re-renders. The cell-level wait narrows this window but can't fully eliminate it — a rare stale read is possible right at the tab switch.
+**Known limitation:** ag-Grid virtualizes rows, so only rows currently scrolled into view exist in the DOM. `ScrapeResearch()` only reads what's rendered — scrolling the grid body would be needed to collect additional rows if the dashboard ever shows more than fit on screen.
 
 ## Polling loop
 

@@ -16,7 +16,15 @@ var settings = configuration.GetSection("Scraper").Get<ScraperSettings>()
 var emailSettings = configuration.GetSection("Email").Get<EmailSettings>() ?? new EmailSettings();
 
 var statePath = Path.Combine(AppContext.BaseDirectory, "data", "research-state.json");
-var pollInterval = TimeSpan.FromMinutes(2);
+var pollInterval = TimeSpan.FromMinutes(1);
+
+void WaitForNextCycle(TimeSpan interval)
+{
+    Console.WriteLine($"Waiting {interval.TotalMinutes:0.#} min(s) for next cycle (press Enter to trigger now)...");
+    var delayTask = Task.Delay(interval);
+    var enterPressedTask = Task.Run(() => Console.ReadLine());
+    Task.WaitAny(delayTask, enterPressedTask);
+}
 
 void NotifyIfEnabled(string body)
 {
@@ -81,8 +89,7 @@ try
             NotifyIfEnabled($"HdfcSec scraper iteration failed at {DateTime.Now}:\n\n{ex}");
         }
 
-        Console.WriteLine($"Waiting {pollInterval.TotalMinutes:0.#} min(s) for next cycle...");
-        Thread.Sleep(pollInterval);
+        WaitForNextCycle(pollInterval);
     }
 }
 catch (Exception ex)

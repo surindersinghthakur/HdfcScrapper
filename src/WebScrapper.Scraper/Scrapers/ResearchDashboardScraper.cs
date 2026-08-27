@@ -91,7 +91,19 @@ public class ResearchDashboardScraper : IDisposable
     {
         Console.WriteLine($"Clicking '{assetClassTabText}' tab...");
         // Top-level asset-class tab, must be selected before the Live/Closed sub-tabs appear.
-        var assetTab = _wait.Until(d => d.FindElement(By.XPath($"//button[@role='tab' and contains(., '{assetClassTabText}')]")));
+        IWebElement assetTab;
+        try
+        {
+            assetTab = _wait.Until(d => d.FindElement(By.XPath($"//button[@role='tab' and contains(., '{assetClassTabText}')]")));
+        }
+        catch (Exception)
+        {
+            // Diagnostic: is this a session/redirect issue (bounced to login) or something
+            // else entirely? Surface what page we're actually on before the exception propagates.
+            Console.WriteLine($"  Could not find '{assetClassTabText}' tab. Current URL: {_driver.Url} | Title: {_driver.Title}");
+            throw;
+        }
+
         assetTab.Click();
 
         Console.WriteLine("Clicking 'Live' sub-tab...");

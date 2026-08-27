@@ -147,10 +147,13 @@ public class ResearchDashboardScraper : IDisposable
 
         foreach (var centerRow in centerRows)
         {
+            var rowIndex = centerRow.GetAttribute("row-index") ?? string.Empty;
+
             try
             {
-                if (!pinnedRowsByIndex.TryGetValue(centerRow.GetAttribute("row-index") ?? string.Empty, out var pinnedRow))
+                if (!pinnedRowsByIndex.TryGetValue(rowIndex, out var pinnedRow))
                 {
+                    Console.WriteLine($"  Skipped row-index={rowIndex}: no matching pinned row (pinned has: [{string.Join(", ", pinnedRowsByIndex.Keys)}]).");
                     continue;
                 }
 
@@ -162,6 +165,7 @@ public class ResearchDashboardScraper : IDisposable
                 {
                     // Row div exists but ag-Grid hasn't finished populating its cells yet; skip it
                     // rather than crash — a re-run (or a longer wait upstream) will pick it up.
+                    Console.WriteLine($"  Skipped row-index={rowIndex}: cells not ready (scripName={scripNameCells.Count}, ltp={ltpCells.Count}, returns={returnsCells.Count}).");
                     continue;
                 }
 
@@ -196,7 +200,7 @@ public class ResearchDashboardScraper : IDisposable
             {
                 // ag-Grid recycled this row's DOM node mid-read (e.g. a live price update);
                 // skip it rather than aborting the whole tab.
-                Console.WriteLine("  Skipped a row: it was recycled by the grid while reading.");
+                Console.WriteLine($"  Skipped row-index={rowIndex}: it was recycled by the grid while reading.");
             }
         }
 

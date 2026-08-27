@@ -81,13 +81,27 @@ try
 {
     scraper.Login();
 
+    var overrideCloseTime = false;
+
     while (true)
     {
-        if (TimeOnly.FromDateTime(DateTime.Now) >= marketClose)
+        if (!overrideCloseTime && TimeOnly.FromDateTime(DateTime.Now) >= marketClose)
         {
-            Console.WriteLine($"Market close time ({marketClose}) reached. Stopping.");
-            NotifyIfEnabled($"HdfcSec scraper stopped: market close time ({marketClose}) reached at {DateTime.Now}.");
-            break;
+            Console.WriteLine($"Market close time ({marketClose}) reached. Press any key within 30s to keep scraping on demand, or it will stop automatically...");
+            var keyPressedTask = Task.Run(() => Console.ReadKey(intercept: true));
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
+
+            if (Task.WaitAny(keyPressedTask, timeoutTask) == 0)
+            {
+                overrideCloseTime = true;
+                Console.WriteLine("Continuing to scrape on demand beyond market close...");
+            }
+            else
+            {
+                Console.WriteLine("No response — stopping.");
+                NotifyIfEnabled($"HdfcSec scraper stopped: market close time ({marketClose}) reached at {DateTime.Now}.");
+                break;
+            }
         }
 
         try

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
@@ -96,7 +97,7 @@ public static class ResearchEmailSender
                 : (double?)null;
 
             sb.Append($"<tr{rowStyle}>")
-              .Append($"<td>{Encode(item.Symbol)}</td>")
+              .Append($"<td>{BuildNameCell(item)}</td>")
               .Append($"<td>{Encode(item.Timestamp)}</td>")
               .Append($"<td>{Encode(item.RecoPrice)}</td>")
               .Append($"<td>{Encode(item.Ltp)}</td>")
@@ -109,6 +110,30 @@ public static class ResearchEmailSender
 
         sb.Append("</table>");
         return sb.ToString();
+    }
+
+    private static readonly Regex DatePartPattern = new(@"^\d{1,2}\s+[A-Za-z]{3,}\s+\d{4}$");
+
+    /// <summary>
+    /// Combines Symbol with Details (e.g. "Sensex • 27 Aug 2026 • 77200 • Put"), dropping the
+    /// date part since that's already shown in the DateTime column.
+    /// </summary>
+    private static string BuildNameCell(ResearchItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.Details))
+        {
+            return Encode(item.Symbol);
+        }
+
+        var partsWithoutDate = item.Details
+            .Split('•', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(part => !DatePartPattern.IsMatch(part));
+
+        var detailsWithoutDate = string.Join(" • ", partsWithoutDate);
+
+        return string.IsNullOrEmpty(detailsWithoutDate)
+            ? Encode(item.Symbol)
+            : $"{Encode(item.Symbol)} ({Encode(detailsWithoutDate)})";
     }
 
     private static double? ParseNumber(string? value) =>

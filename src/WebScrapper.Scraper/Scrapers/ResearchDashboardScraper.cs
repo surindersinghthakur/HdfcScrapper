@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
 using WebScrapper.Scraper.Config;
@@ -250,6 +251,7 @@ public class ResearchDashboardScraper : IDisposable
                 }
 
                 var nameLines = scripNameCells[0].FindElements(By.CssSelector("p.MuiTypography-root"));
+                var (category, symbol, details, timestamp) = ParseScripNameLines(nameLines);
                 var ltpLines = ltpCells[0].FindElements(By.CssSelector("p.MuiTypography-root"));
 
                 var recoPrice = centerRow.FindElements(By.CssSelector("[col-id='recoPrice'] p.MuiTypography-root"))
@@ -260,10 +262,10 @@ public class ResearchDashboardScraper : IDisposable
 
                 var item = new ResearchItem
                 {
-                    Category = nameLines.ElementAtOrDefault(0)?.Text,
-                    Symbol = nameLines.ElementAtOrDefault(1)?.Text ?? string.Empty,
-                    Details = nameLines.ElementAtOrDefault(2)?.Text,
-                    Timestamp = nameLines.ElementAtOrDefault(3)?.Text,
+                    Category = category,
+                    Symbol = symbol,
+                    Details = details,
+                    Timestamp = timestamp,
                     Ltp = ltpLines.ElementAtOrDefault(0)?.Text,
                     Change = ltpLines.ElementAtOrDefault(1)?.Text,
                     ChangePercent = ltpLines.ElementAtOrDefault(2)?.Text,
@@ -296,6 +298,49 @@ public class ResearchDashboardScraper : IDisposable
         {
             return null;
         }
+    }
+
+    private static readonly Regex TimestampPattern = new(@"\d{1,2}:\d{2}\s*(AM|PM)", RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Parses the scrip-name cell's &lt;p&gt; lines by content pattern rather than fixed
+    /// position — some rows (observed on F&amp;O index/futures contracts) have no category chip
+    /// at all, which shifts every subsequent line's position by one and silently corrupts a
+    /// fixed-index read (Details ends up read as Symbol, Timestamp is lost entirely). The
+    /// Details line always contains "•" separators and the Timestamp line always matches a
+    /// time-of-day pattern, so those two are identified by content; whatever's left is Category
+    /// (if two lines remain) and/or Symbol (the last of what's left).
+    /// </summary>
+    private static (string? Category, string Symbol, string? Details, string? Timestamp) ParseScripNameLines(
+        IReadOnlyList<IWebElement> nameLines)
+    {
+        var lineTexts = nameLines.Select(el => el.Text).ToList();
+
+        int? detailsIndex = null;
+        int? timestampIndex = null;
+        for (var i = 0; i < lineTexts.Count; i++)
+        {
+            if (detailsIndex is null && lineTexts[i].Contains('•'))
+            {
+                detailsIndex = i;
+            }
+            else if (timestampIndex is null && TimestampPattern.IsMatch(lineTexts[i]))
+            {
+                timestampIndex = i;
+            }
+        }
+
+        var remaining = Enumerable.Range(0, lineTexts.Count)
+            .Where(i => i != detailsIndex && i != timestampIndex)
+            .Select(i => lineTexts[i])
+            .ToList();
+
+        var category = remaining.Count >= 2 ? remaining[0] : null;
+        var symbol = remaining.Count >= 1 ? remaining[^1] : string.Empty;
+        var details = detailsIndex.HasValue ? lineTexts[detailsIndex.Value] : null;
+        var timestamp = timestampIndex.HasValue ? lineTexts[timestampIndex.Value] : null;
+
+        return (category, symbol, details, timestamp);
     }
 
     /// <summary>

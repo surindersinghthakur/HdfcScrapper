@@ -102,9 +102,13 @@ if (args.Contains("--test-whatsapp"))
 
     if (useWhatsAppWeb)
     {
-        using var testWhatsAppWeb = new WhatsAppWebNotifier(whatsAppSettings);
+        // Not disposed here on purpose — leaves the browser open afterward so you can inspect
+        // the actual WhatsApp Web page state (chat opened, message sent or still in the box,
+        // any error dialog) instead of it closing immediately after the click.
+        var testWhatsAppWeb = new WhatsAppWebNotifier(whatsAppSettings);
         testWhatsAppWeb.EnsureLoggedIn();
         testWhatsAppWeb.SendChanges(settings.ScrapeTarget, testItems, new List<ResearchItem>());
+        Console.WriteLine("Leaving the browser open so you can inspect it. Close it manually when done.");
     }
     else
     {

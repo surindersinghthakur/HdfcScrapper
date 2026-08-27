@@ -92,9 +92,23 @@ public class WhatsAppWebNotifier : IDisposable
         // click after this.
         var url = $"https://web.whatsapp.com/send?phone={Uri.EscapeDataString(_settings.PhoneNumber)}&text={Uri.EscapeDataString(text)}";
         _driver.Navigate().GoToUrl(url);
+        Console.WriteLine($"  Navigated to send URL. Current URL: {_driver.Url}");
+
+        // WhatsApp sometimes shows an intermediate "Continue to Chat" landing page (e.g. for
+        // numbers not already saved as a contact) before the actual chat opens.
+        var continueButton = _driver
+            .FindElements(By.XPath("//a[contains(., 'Continue to Chat')] | //button[contains(., 'Continue to Chat')]"))
+            .FirstOrDefault();
+        if (continueButton != null)
+        {
+            Console.WriteLine("  Found 'Continue to Chat' landing page, clicking through...");
+            continueButton.Click();
+        }
 
         var sendButton = _wait.Until(d => d.FindElement(By.CssSelector(SendButtonSelector)));
+        Console.WriteLine($"  DEBUG send button outerHTML: {sendButton.GetAttribute("outerHTML")}");
         sendButton.Click();
+        Console.WriteLine($"  Clicked send. URL now: {_driver.Url}");
     }
 
     public void Dispose()

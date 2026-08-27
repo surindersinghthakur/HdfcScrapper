@@ -51,6 +51,30 @@ Console.CancelKeyPress += (_, e) =>
     Environment.Exit(0);
 };
 
+var marketOpen = TimeOnly.Parse(settings.MarketOpenTime);
+var marketClose = TimeOnly.Parse(settings.MarketCloseTime);
+
+// Self-limiting: intended to be started manually each weekday, whenever convenient, and left
+// unattended until market close. Doesn't launch Chrome at all if there's nothing to do today.
+if (DateTime.Now.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+{
+    Console.WriteLine($"Today ({DateTime.Now:dddd}) is not a trading weekday. Exiting.");
+    return;
+}
+
+if (TimeOnly.FromDateTime(DateTime.Now) >= marketClose)
+{
+    Console.WriteLine($"Market close time ({marketClose}) has already passed today. Exiting.");
+    return;
+}
+
+if (TimeOnly.FromDateTime(DateTime.Now) < marketOpen)
+{
+    var waitSpan = DateTime.Today.Add(marketOpen.ToTimeSpan()) - DateTime.Now;
+    Console.WriteLine($"Waiting until market open at {marketOpen} ({waitSpan.TotalMinutes:0} min from now)...");
+    Thread.Sleep(waitSpan);
+}
+
 using var scraper = new ResearchDashboardScraper(settings);
 
 try
@@ -59,6 +83,13 @@ try
 
     while (true)
     {
+        if (TimeOnly.FromDateTime(DateTime.Now) >= marketClose)
+        {
+            Console.WriteLine($"Market close time ({marketClose}) reached. Stopping.");
+            NotifyIfEnabled($"HdfcSec scraper stopped: market close time ({marketClose}) reached at {DateTime.Now}.");
+            break;
+        }
+
         try
         {
             var items = scraper.ScrapeResearch();

@@ -36,8 +36,24 @@ public class ResearchDashboardScraper : IDisposable
         Console.WriteLine($"Navigating to login page: {_settings.LoginUrl}");
         _driver.Navigate().GoToUrl(_settings.LoginUrl);
 
+        // If the persisted chrome-profile session is still valid (e.g. an unattended run
+        // relying on yesterday's cookies), the site may redirect straight to the dashboard
+        // instead of showing the login form. Detect that with a short wait instead of blocking
+        // on the full TimeoutSeconds and then Console.ReadLine() for a login step that isn't
+        // actually needed.
+        IWebElement usernameField;
+        try
+        {
+            var shortWait = new WebDriverWait(_driver, TimeSpan.FromSeconds(5));
+            usernameField = shortWait.Until(d => d.FindElement(By.Id("name")));
+        }
+        catch (WebDriverTimeoutException)
+        {
+            Console.WriteLine("Login form not shown — assuming the persisted session is still valid. Skipping login.");
+            return;
+        }
+
         Console.WriteLine("Filling username...");
-        var usernameField = _wait.Until(d => d.FindElement(By.Id("name")));
         usernameField.SendKeys(_settings.Username);
 
         Console.WriteLine("Filling password...");

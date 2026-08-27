@@ -40,7 +40,20 @@ set Scraper__Password=your-password
 dotnet run --project src/WebScrapper.Scraper
 ```
 
-Chrome opens (non-headless by default) so you can solve any CAPTCHA or 2FA manually — the session is cached in `chrome-profile/` so subsequent runs skip login. The process then polls indefinitely every 2 minutes (Ctrl+C to stop) — see [Polling loop](#polling-loop) below.
+Chrome opens (non-headless by default) so you can solve any CAPTCHA or 2FA manually — the session is cached in `chrome-profile/` so subsequent runs skip login. The process then polls indefinitely every 1 minute (Ctrl+C to stop, or press Enter during a wait to trigger the next cycle immediately) — see [Polling loop](#polling-loop) below.
+
+### Running unattended for the trading day
+
+`Scraper.MarketOpenTime` / `Scraper.MarketCloseTime` ("HH:mm", default `09:15`/`15:40`) make the program self-limiting:
+
+- Not a weekday → exits immediately without launching Chrome.
+- Already past close time → exits immediately.
+- Before open time → waits (no Chrome launched yet) until market open, then proceeds.
+- Once running, it stops polling and exits cleanly once close time is reached (a notification email is sent if `Email.Enabled`).
+
+You still start it manually each day — this isn't OS-scheduled — but you can start it any time before market open (e.g. first thing in the morning) and walk away; it'll wait for open, run all day, and stop itself at close.
+
+**Login on unattended days:** if `chrome-profile/`'s persisted session is still valid, `Login()` detects that the login form never appears (the site redirects straight to the dashboard) and skips straight through — no OTP, no blocking on Enter. This depends on the site's session surviving between days, which isn't guaranteed; if it doesn't, the program will block waiting for you to complete login/OTP and press Enter, same as any other run.
 
 For quick test runs, set `Scraper.MaxRows` (e.g. `5`) to cap how many rows are read per tab, and watch each row get printed to the console as it's scraped.
 

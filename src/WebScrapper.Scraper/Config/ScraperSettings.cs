@@ -14,4 +14,10 @@ public class ScraperSettings
 
     /// <summary>Cap on rows read per tab (null = no cap). Useful for fast test runs.</summary>
     public int? MaxRows { get; set; }
+
+    /// <summary>"HH:mm" — the program waits until this time if started earlier (weekdays only).</summary>
+    public string MarketOpenTime { get; set; } = "09:15";
+
+    /// <summary>"HH:mm" — the program stops polling and exits once this time is reached.</summary>
+    public string MarketCloseTime { get; set; } = "15:40";
 }

@@ -40,7 +40,11 @@ public static class WhatsAppNotifier
             sb.AppendLine("*New:*");
             foreach (var item in added)
             {
-                sb.AppendLine($"- {item.Symbol} | Reco {item.RecoPrice} | LTP {item.Ltp} | {item.Action}");
+                sb.AppendLine();
+                sb.AppendLine($"Name: {item.Symbol}");
+                sb.AppendLine($"RecoPrice: {item.RecoPrice}");
+                sb.AppendLine($"TargetPrice: {item.TargetPrice}");
+                sb.AppendLine($"LTP: {item.Ltp}");
             }
         }
 
@@ -50,7 +54,11 @@ public static class WhatsAppNotifier
             sb.AppendLine("*Removed:*");
             foreach (var item in removed)
             {
-                sb.AppendLine($"- {item.Symbol}");
+                sb.AppendLine();
+                sb.AppendLine($"Name: {item.Symbol}");
+                sb.AppendLine($"RecoPrice: {item.RecoPrice}");
+                sb.AppendLine($"TargetPrice: {item.TargetPrice}");
+                sb.AppendLine($"LTP: {item.Ltp}");
             }
         }
 

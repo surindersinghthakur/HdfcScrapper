@@ -77,7 +77,10 @@ public static class ResearchEmailSender
 
         foreach (var item in items)
         {
-            sb.Append("<tr>")
+            var isSell = string.Equals(item.Action?.Trim(), "sell", StringComparison.OrdinalIgnoreCase);
+            var rowStyle = isSell ? " style='background:#f8d7da'" : string.Empty;
+
+            sb.Append($"<tr{rowStyle}>")
               .Append($"<td>{Encode(item.Symbol)}</td>")
               .Append($"<td>{Encode(item.Timestamp)}</td>")
               .Append($"<td>{Encode(item.RecoPrice)}</td>")

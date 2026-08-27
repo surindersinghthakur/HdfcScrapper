@@ -164,9 +164,26 @@ public class ResearchDashboardScraper : IDisposable
                     continue;
                 }
 
-                var scripNameCells = pinnedRow.FindElements(By.CssSelector("[col-id='scripName']"));
-                var ltpCells = centerRow.FindElements(By.CssSelector("[col-id='ltp']"));
-                var returnsCells = centerRow.FindElements(By.CssSelector("[col-id='potentialReturns']"));
+                // Live LTP data means ag-Grid keeps recycling this row's cell DOM nodes (they
+                // were confirmed populated a moment ago by the wait above, yet can already be
+                // empty again by the time we read them here) — retry briefly before giving up.
+                IReadOnlyList<IWebElement> scripNameCells = Array.Empty<IWebElement>();
+                IReadOnlyList<IWebElement> ltpCells = Array.Empty<IWebElement>();
+                IReadOnlyList<IWebElement> returnsCells = Array.Empty<IWebElement>();
+
+                for (var attempt = 0; attempt < 5; attempt++)
+                {
+                    scripNameCells = pinnedRow.FindElements(By.CssSelector("[col-id='scripName']"));
+                    ltpCells = centerRow.FindElements(By.CssSelector("[col-id='ltp']"));
+                    returnsCells = centerRow.FindElements(By.CssSelector("[col-id='potentialReturns']"));
+
+                    if (scripNameCells.Count > 0 && ltpCells.Count > 0 && returnsCells.Count > 0)
+                    {
+                        break;
+                    }
+
+                    Thread.Sleep(300);
+                }
 
                 if (scripNameCells.Count == 0 || ltpCells.Count == 0 || returnsCells.Count == 0)
                 {

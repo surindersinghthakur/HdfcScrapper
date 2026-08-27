@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using MailKit.Net.Smtp;
 using MailKit.Security;
@@ -72,8 +73,8 @@ public static class ResearchEmailSender
         var sb = new StringBuilder();
         sb.Append("<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;font-family:sans-serif;font-size:14px'>");
         sb.Append("<tr style='background:#f2f2f2'>")
-          .Append("<th>Name</th><th>Reco Date</th><th>Reco Price</th><th>LTP</th><th>Action</th>")
-          .Append("<th>Target Price</th><th>Target Valid Till</th><th>Stoploss</th><th>Scrap Date</th>")
+          .Append("<th>Name</th><th>DateTime</th><th>Reco Price</th><th>LTP</th><th>Diff%</th>")
+          .Append("<th>Target Price</th><th>S/L</th><th>Profit%</th>")
           .Append("</tr>");
 
         foreach (var item in items)
@@ -81,21 +82,42 @@ public static class ResearchEmailSender
             var isSell = string.Equals(item.Action?.Trim(), "sell", StringComparison.OrdinalIgnoreCase);
             var rowStyle = isSell ? " style='background:#f8d7da'" : string.Empty;
 
+            var ltp = ParseNumber(item.Ltp);
+            var recoPrice = ParseNumber(item.RecoPrice);
+            var targetPrice = ParseNumber(item.TargetPrice);
+
+            // Diff% = how LTP has moved from the reco price; Profit% = how LTP compares to target.
+            var diffPercent = ltp is double l1 && recoPrice is double r && r != 0 ? (l1 - r) / r * 100 : (double?)null;
+            var profitPercent = ltp is double l2 && targetPrice is double t && t != 0 ? (l2 - t) / t * 100 : (double?)null;
+
             sb.Append($"<tr{rowStyle}>")
               .Append($"<td>{Encode(item.Symbol)}</td>")
               .Append($"<td>{Encode(item.Timestamp)}</td>")
               .Append($"<td>{Encode(item.RecoPrice)}</td>")
               .Append($"<td>{Encode(item.Ltp)}</td>")
-              .Append($"<td>{Encode(item.Action)}</td>")
+              .Append($"<td>{FormatPercent(diffPercent)}</td>")
               .Append($"<td>{Encode(item.TargetPrice)}</td>")
-              .Append($"<td>{Encode(item.TargetPriceValidTill)}</td>")
               .Append($"<td>{Encode(item.StoplossAt)}</td>")
-              .Append($"<td>{item.ScrapedAtUtc:u}</td>")
+              .Append($"<td>{FormatPercent(profitPercent)}</td>")
               .Append("</tr>");
         }
 
         sb.Append("</table>");
         return sb.ToString();
+    }
+
+    private static double? ParseNumber(string? value) =>
+        double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result) ? result : null;
+
+    private static string FormatPercent(double? percent)
+    {
+        if (percent is not double value)
+        {
+            return string.Empty;
+        }
+
+        var color = value < 0 ? "red" : "green";
+        return $"<span style='color:{color}'>{value:0.00}%</span>";
     }
 
     private static string Encode(string? value) => System.Net.WebUtility.HtmlEncode(value ?? string.Empty);

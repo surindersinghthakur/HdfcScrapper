@@ -331,10 +331,14 @@ public class ResearchDashboardScraper : IDisposable
         }
 
         scripNameCell.Click();
+        Console.WriteLine($"  Clicked scrip name. URL now: {_driver.Url}");
 
         try
         {
-            _wait.Until(d => d.FindElements(By.XPath(BackButtonXPath)).Count > 0);
+            // Wait for the field we actually need (Target Price is expected on both F&O and
+            // Stocks) rather than the back button — the back button's SVG-path fingerprint may
+            // not reliably identify the right element every time.
+            _wait.Until(d => d.FindElements(By.XPath(".//p[normalize-space(text())='Target Price']")).Count > 0);
 
             item.TargetPrice = TryGetSiblingValue(_driver, "Target Price");
             item.TargetPriceValidTill = TryGetSiblingValue(_driver, "Target price vaild till");
@@ -346,7 +350,16 @@ public class ResearchDashboardScraper : IDisposable
         }
         finally
         {
-            _driver.FindElements(By.XPath(BackButtonXPath)).FirstOrDefault()?.Click();
+            var backButton = _driver.FindElements(By.XPath(BackButtonXPath)).FirstOrDefault();
+            if (backButton != null)
+            {
+                backButton.Click();
+            }
+            else
+            {
+                Console.WriteLine("  Back button not found by icon shape — using browser back navigation instead.");
+                _driver.Navigate().Back();
+            }
         }
     }
 

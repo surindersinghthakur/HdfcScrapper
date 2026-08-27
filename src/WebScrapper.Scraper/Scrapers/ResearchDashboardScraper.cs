@@ -298,15 +298,12 @@ public class ResearchDashboardScraper : IDisposable
         }
     }
 
-    // Matches the site's own (typo'd) label text verbatim.
-    private const string BackButtonXPath = "//button[.//path[contains(@d,'12.7071 4.29289')]]";
-
     /// <summary>
-    /// Opens the given item's detail page (by clicking its scrip name in the grid) and fills
-    /// in TargetPrice/TargetPriceValidTill/StoplossAt, then navigates back. Only called for
-    /// items that are actually new since the last poll — doing this for every row on every
-    /// scrape would mean one navigate-click-extract-back round trip per row (there can be 100+),
-    /// which is far too slow to run every cycle.
+    /// Opens the given item's detail view (by clicking its scrip name in the grid) and fills
+    /// in TargetPrice/TargetPriceValidTill/StoplossAt. Only called for items that are actually
+    /// new since the last poll — doing this for every row on every scrape would mean one
+    /// navigate-click-extract round trip per row (there can be 100+), which is far too slow to
+    /// run every cycle.
     /// </summary>
     public void EnrichWithDetails(ResearchItem item)
     {
@@ -316,6 +313,13 @@ public class ResearchDashboardScraper : IDisposable
 
         Console.WriteLine($"Fetching detail fields for {item.Symbol}...");
 
+        // The detail view is an in-place client-side state change, not a real page navigation
+        // (the URL never changes when you click into it — confirmed by observation). So there's
+        // no real "back" to click or browser history to walk; the fresh GoToUrl here on every
+        // call is what actually resets us to the grid, regardless of whatever detail-view state
+        // was left over from the previous call. (Navigate().Back() was tried here previously and
+        // is wrong for the same reason: it walks real browser history, which has nothing to do
+        // with this in-app state, and drifts further off-course with every call.)
         _driver.Navigate().GoToUrl(_settings.TargetUrl);
         _wait.Until(d => d.FindElement(By.XPath($"//button[@role='tab' and contains(., '{assetClassTabText}')]"))).Click();
         _wait.Until(d => d.FindElement(By.XPath("//button[@role='tab' and contains(., 'Live')]"))).Click();
@@ -331,13 +335,11 @@ public class ResearchDashboardScraper : IDisposable
         }
 
         scripNameCell.Click();
-        Console.WriteLine($"  Clicked scrip name. URL now: {_driver.Url}");
 
         try
         {
             // Wait for the field we actually need (Target Price is expected on both F&O and
-            // Stocks) rather than the back button — the back button's SVG-path fingerprint may
-            // not reliably identify the right element every time.
+            // Stocks) as the signal that the detail view has opened.
             _wait.Until(d => d.FindElements(By.XPath(".//p[normalize-space(text())='Target Price']")).Count > 0);
 
             item.TargetPrice = TryGetSiblingValue(_driver, "Target Price");
@@ -347,19 +349,6 @@ public class ResearchDashboardScraper : IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"  Failed reading detail fields for {item.Symbol}: {ex.Message}");
-        }
-        finally
-        {
-            var backButton = _driver.FindElements(By.XPath(BackButtonXPath)).FirstOrDefault();
-            if (backButton != null)
-            {
-                backButton.Click();
-            }
-            else
-            {
-                Console.WriteLine("  Back button not found by icon shape — using browser back navigation instead.");
-                _driver.Navigate().Back();
-            }
         }
     }
 

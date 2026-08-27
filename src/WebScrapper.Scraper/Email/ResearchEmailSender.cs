@@ -86,9 +86,11 @@ public static class ResearchEmailSender
             var recoPrice = ParseNumber(item.RecoPrice);
             var targetPrice = ParseNumber(item.TargetPrice);
 
-            // Diff% = how LTP has moved from the reco price; Profit% = how LTP compares to target.
+            // Diff% = how LTP has moved from the reco price. Profit% = remaining upside to
+            // target, relative to target (positive = more room to grow; negative only once LTP
+            // has overshot the target).
             var diffPercent = ltp is double l1 && recoPrice is double r && r != 0 ? (l1 - r) / r * 100 : (double?)null;
-            var profitPercent = ltp is double l2 && targetPrice is double t && t != 0 ? (l2 - t) / t * 100 : (double?)null;
+            var profitPercent = ltp is double l2 && targetPrice is double t && t != 0 ? (t - l2) / t * 100 : (double?)null;
 
             sb.Append($"<tr{rowStyle}>")
               .Append($"<td>{Encode(item.Symbol)}</td>")

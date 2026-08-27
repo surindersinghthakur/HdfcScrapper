@@ -298,6 +298,103 @@ public class ResearchDashboardScraper : IDisposable
         }
     }
 
+    // Matches the site's own (typo'd) label text verbatim.
+    private const string BackButtonXPath = "//button[.//path[contains(@d,'12.7071 4.29289')]]";
+
+    /// <summary>
+    /// Opens the given item's detail page (by clicking its scrip name in the grid) and fills
+    /// in TargetPrice/TargetPriceValidTill/StoplossAt, then navigates back. Only called for
+    /// items that are actually new since the last poll — doing this for every row on every
+    /// scrape would mean one navigate-click-extract-back round trip per row (there can be 100+),
+    /// which is far too slow to run every cycle.
+    /// </summary>
+    public void EnrichWithDetails(ResearchItem item)
+    {
+        var assetClassTabText = _settings.ScrapeTarget.Equals("Stocks", StringComparison.OrdinalIgnoreCase)
+            ? "Stocks"
+            : "F&O";
+
+        Console.WriteLine($"Fetching detail fields for {item.Symbol}...");
+
+        _driver.Navigate().GoToUrl(_settings.TargetUrl);
+        _wait.Until(d => d.FindElement(By.XPath($"//button[@role='tab' and contains(., '{assetClassTabText}')]"))).Click();
+        _wait.Until(d => d.FindElement(By.XPath("//button[@role='tab' and contains(., 'Live')]"))).Click();
+
+        var gridRoot = _wait.Until(d => d.FindElement(
+            By.XPath("//div[contains(@class,'ag-root-wrapper')][.//*[@col-id='scripName']]")));
+
+        var scripNameCell = FindScripNameCellBySymbol(gridRoot, item.Symbol);
+        if (scripNameCell == null)
+        {
+            Console.WriteLine($"  Could not locate {item.Symbol} in the grid to fetch details — skipping.");
+            return;
+        }
+
+        scripNameCell.Click();
+
+        try
+        {
+            _wait.Until(d => d.FindElements(By.XPath(BackButtonXPath)).Count > 0);
+
+            item.TargetPrice = TryGetSiblingValue(_driver, "Target Price");
+            item.TargetPriceValidTill = TryGetSiblingValue(_driver, "Target price vaild till");
+            item.StoplossAt = TryGetSiblingValue(_driver, "Stoploss at");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  Failed reading detail fields for {item.Symbol}: {ex.Message}");
+        }
+        finally
+        {
+            _driver.FindElements(By.XPath(BackButtonXPath)).FirstOrDefault()?.Click();
+        }
+    }
+
+    /// <summary>Scrolls the grid looking for the pinned scrip-name cell matching the given symbol.</summary>
+    private IWebElement? FindScripNameCellBySymbol(IWebElement gridRoot, string symbol)
+    {
+        var scrollContainer = gridRoot.FindElement(By.CssSelector(".ag-body-viewport"));
+        var js = (IJavaScriptExecutor)_driver;
+
+        for (var i = 0; i < 100; i++)
+        {
+            var match = gridRoot
+                .FindElements(By.CssSelector("div.ag-pinned-left-cols-container [col-id='scripName']"))
+                .FirstOrDefault(cell => cell.FindElements(By.CssSelector("p.MuiTypography-root")).ElementAtOrDefault(1)?.Text == symbol);
+
+            if (match != null)
+            {
+                return match;
+            }
+
+            var atBottom = (bool)(js.ExecuteScript(
+                "var el = arguments[0]; return (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 2);",
+                scrollContainer) ?? false);
+
+            if (atBottom)
+            {
+                return null;
+            }
+
+            js.ExecuteScript("arguments[0].scrollTop += arguments[0].clientHeight;", scrollContainer);
+            Thread.Sleep(600);
+        }
+
+        return null;
+    }
+
+    private static string? TryGetSiblingValue(ISearchContext scope, string labelText)
+    {
+        try
+        {
+            return scope.FindElement(By.XPath($".//p[normalize-space(text())='{labelText}']/following-sibling::p[1]")).Text;
+        }
+        catch (NoSuchElementException)
+        {
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         _driver.Quit();

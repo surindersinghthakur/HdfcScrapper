@@ -74,6 +74,21 @@ try
             {
                 if (emailSettings.Enabled)
                 {
+                    // Only fetch each item's detail page (Target Price / valid-till / stoploss)
+                    // for genuinely new picks -- doing this for every row on every scrape would
+                    // mean a navigate-click-extract-back round trip per row, which doesn't scale.
+                    foreach (var item in added)
+                    {
+                        try
+                        {
+                            scraper.EnrichWithDetails(item);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Failed to fetch detail fields for {item.Symbol}: {ex.Message}");
+                        }
+                    }
+
                     ResearchEmailSender.SendChanges(emailSettings, settings.ScrapeTarget, added, removed);
                     Console.WriteLine($"Emailed changes to {emailSettings.RecipientEmail}.");
                 }

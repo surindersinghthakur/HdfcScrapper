@@ -60,11 +60,17 @@ Each poll then calls `ScrapeResearch()`, which scrapes the asset-class tab selec
 
 The grid renders each row's cells across two DOM containers — a pinned-left container for the scrip name column, and a center container for LTP/Reco Price/Potential Returns — matched up by a shared `row-index` attribute. Extraction uses ag-Grid's stable `col-id` attributes and the fixed order of `<p>` text lines within each cell, since MUI's generated `mui-xxxxx` classes are unstable across builds.
 
-**Known limitation:** ag-Grid virtualizes rows, so only rows currently scrolled into view exist in the DOM. `ScrapeResearch()` only reads what's rendered — scrolling the grid body would be needed to collect additional rows if the dashboard ever shows more than fit on screen.
+ag-Grid virtualizes rows (only rows scrolled into view exist in the DOM), so `ScrapeResearch()` programmatically scrolls the grid body (via JS `scrollTop`), extracting whatever's visible at each position and merging into a deduplicated set (keyed by Symbol+RecoPrice+Timestamp, since `row-index` gets recycled for different rows as the grid scrolls). It stops at the bottom of the grid or after a few scrolls produce no new rows.
+
+### Per-item detail fields
+
+Clicking a row's scrip name navigates to a detail page with additional fields — `EnrichWithDetails()` extracts **Target Price**, **Target price vaild till** (typo intentional — matches the site's actual label), and **Stoploss at** (may not exist for Stocks; left `null` rather than treated as an error) by matching on that label text, then clicks the back button (found by its SVG icon path, since it has no stable id/class) to return.
+
+This is only called for items that are actually **new** since the last poll — running it for every row on every scrape would mean a navigate → click → extract → back round trip per row (100+ of them), which doesn't scale. It's called from `Program.cs` right before emailing, once per item in `added`.
 
 ## Polling loop
 
-`Program.cs` logs in once, then loops forever: scrape → diff against the last snapshot → email if changed → save the new snapshot → sleep 2 minutes → repeat. A failed iteration (network blip, page hiccup) is logged and skipped rather than crashing the whole process.
+`Program.cs` logs in once, then loops forever: scrape → diff against the last snapshot → enrich new items with detail-page fields → email if changed → save the new snapshot → wait 1 minute (or press Enter to trigger the next cycle immediately) → repeat. A failed iteration (network blip, page hiccup) is logged, emailed as a notification, and skipped rather than crashing the whole process. Ctrl+C and any fatal crash also send a notification email before exiting.
 
 Each scraped `ResearchItem` carries a `ScrapedAtUtc` timestamp (in addition to the site's own displayed `Timestamp`), so both the local snapshot and any email show when each row was actually captured.
 

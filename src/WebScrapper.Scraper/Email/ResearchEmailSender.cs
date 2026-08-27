@@ -72,7 +72,8 @@ public static class ResearchEmailSender
         var sb = new StringBuilder();
         sb.Append("<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;font-family:sans-serif;font-size:14px'>");
         sb.Append("<tr style='background:#f2f2f2'>")
-          .Append("<th>Name</th><th>Reco Date</th><th>Reco Price</th><th>LTP</th><th>Action</th><th>Scrap Date</th>")
+          .Append("<th>Name</th><th>Reco Date</th><th>Reco Price</th><th>LTP</th><th>Action</th>")
+          .Append("<th>Target Price</th><th>Target Valid Till</th><th>Stoploss</th><th>Scrap Date</th>")
           .Append("</tr>");
 
         foreach (var item in items)
@@ -86,6 +87,9 @@ public static class ResearchEmailSender
               .Append($"<td>{Encode(item.RecoPrice)}</td>")
               .Append($"<td>{Encode(item.Ltp)}</td>")
               .Append($"<td>{Encode(item.Action)}</td>")
+              .Append($"<td>{Encode(item.TargetPrice)}</td>")
+              .Append($"<td>{Encode(item.TargetPriceValidTill)}</td>")
+              .Append($"<td>{Encode(item.StoplossAt)}</td>")
               .Append($"<td>{item.ScrapedAtUtc:u}</td>")
               .Append("</tr>");
         }

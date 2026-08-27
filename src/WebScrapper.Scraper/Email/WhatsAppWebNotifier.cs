@@ -95,10 +95,20 @@ public class WhatsAppWebNotifier : IDisposable
         Console.WriteLine($"  Navigated to send URL. Current URL: {_driver.Url}");
 
         // WhatsApp sometimes shows an intermediate "Continue to Chat" landing page (e.g. for
-        // numbers not already saved as a contact) before the actual chat opens.
-        var continueButton = _driver
-            .FindElements(By.XPath("//a[contains(., 'Continue to Chat')] | //button[contains(., 'Continue to Chat')]"))
-            .FirstOrDefault();
+        // numbers not already saved as a contact) before the actual chat opens. Checking for it
+        // immediately after navigation (no wait) misses it entirely, since the SPA needs a
+        // moment to render either state — wait for whichever one shows up first.
+        const string ContinueToChatXPath = "//a[contains(., 'Continue to Chat')] | //button[contains(., 'Continue to Chat')]";
+        try
+        {
+            _wait.Until(d => d.FindElements(By.XPath($"{ContinueToChatXPath} | //button[@aria-label='Send'] | //span[@data-icon='send']")).Count > 0);
+        }
+        catch (WebDriverTimeoutException)
+        {
+            // Fall through — the explicit send-button wait below will surface a clearer error.
+        }
+
+        var continueButton = _driver.FindElements(By.XPath(ContinueToChatXPath)).FirstOrDefault();
         if (continueButton != null)
         {
             Console.WriteLine("  Found 'Continue to Chat' landing page, clicking through...");

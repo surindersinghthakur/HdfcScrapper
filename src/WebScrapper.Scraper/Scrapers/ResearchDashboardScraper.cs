@@ -157,29 +157,39 @@ public class ResearchDashboardScraper : IDisposable
 
             // F&O has an instrument-type dropdown (same row as the Live/Closed tabs) that
             // defaults to "Options" — it must be switched to "Future" and scraped separately;
-            // it's a different data set, not just a filter on the same rows.
-            Console.WriteLine("Switching F&O instrument type dropdown to 'Future'...");
-            SelectFnoInstrumentType("Future");
+            // it's a different data set, not just a filter on the same rows. Options data is
+            // the default/primary view and must always make it into the email even if Future
+            // scraping fails outright (e.g. the dropdown itself doesn't respond) — so this whole
+            // block is best-effort: log and move on, keeping the Options items collected above.
+            try
+            {
+                Console.WriteLine("Switching F&O instrument type dropdown to 'Future'...");
+                SelectFnoInstrumentType("Future");
 
-            // Switching instrument type tears down and refetches the whole grid (a real data
-            // reload, not just a client-side filter) and has been observed taking well over 60s
-            // -- confirmed structurally identical to Options once it does load, so this is purely
-            // a slow load, not a selector problem. Poll with visible progress instead of a single
-            // silent wait, and skip Future for this cycle (rather than crash the whole scrape)
-            // if it genuinely never shows up.
-            var futureGridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
-            if (futureGridRoot == null)
-            {
-                Console.WriteLine("  Future grid never appeared within 180s — skipping Future for this cycle.");
-            }
-            else
-            {
-                var futureItems = ScrapeCurrentGridState(futureGridRoot, assetClassTabText);
-                foreach (var item in futureItems)
+                // Switching instrument type tears down and refetches the whole grid (a real data
+                // reload, not just a client-side filter) and has been observed taking well over 60s
+                // -- confirmed structurally identical to Options once it does load, so this is purely
+                // a slow load, not a selector problem. Poll with visible progress instead of a single
+                // silent wait, and skip Future for this cycle (rather than crash the whole scrape)
+                // if it genuinely never shows up.
+                var futureGridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
+                if (futureGridRoot == null)
                 {
-                    item.InstrumentType = "Future";
+                    Console.WriteLine("  Future grid never appeared within 180s — skipping Future for this cycle.");
                 }
-                items.AddRange(futureItems);
+                else
+                {
+                    var futureItems = ScrapeCurrentGridState(futureGridRoot, assetClassTabText);
+                    foreach (var item in futureItems)
+                    {
+                        item.InstrumentType = "Future";
+                    }
+                    items.AddRange(futureItems);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Future scraping failed, keeping Options results only: {ex.Message}");
             }
         }
 

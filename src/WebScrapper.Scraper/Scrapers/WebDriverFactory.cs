@@ -23,8 +23,11 @@ public static class WebDriverFactory
         var profileDir = Path.Combine(AppContext.BaseDirectory, "chrome-profile");
         options.AddArgument($"--user-data-dir={profileDir}");
 
-        var driver = new ChromeDriver(options);
-        driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(settings.TimeoutSeconds);
-        return driver;
+        // No implicit wait: mixing it with the explicit WebDriverWait used elsewhere is a
+        // known Selenium footgun. Every FindElements call that legitimately returns zero
+        // results (common while probing per-row cells) would silently block for the full
+        // implicit-wait duration before giving up, making failures look like a hang with
+        // no error and no console output — exactly what happened when this was set.
+        return new ChromeDriver(options);
     }
 }

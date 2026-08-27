@@ -114,15 +114,25 @@ public class ResearchDashboardScraper : IDisposable
         Console.WriteLine("Waiting for grid rows to render...");
         // Wait for the actual cells, not just the row containers: ag-Grid inserts row divs
         // before populating their cells, so checking row count alone is a race condition.
+        // Also require the pinned-left and center row counts to match — right after a tab
+        // switch, the center columns can finish re-rendering (new row count) before the
+        // pinned-left column catches up (still showing the previous tab's row count), which
+        // otherwise causes every row lookup below to miss and get silently skipped.
         // If the Live table is empty, there's nothing to wait for — time out gracefully
         // (within the configured TimeoutSeconds) instead of throwing.
         try
         {
-            _wait.Until(d => d.FindElements(By.CssSelector("div.ag-center-cols-container [col-id='ltp']")).Count > 0);
+            _wait.Until(d =>
+            {
+                var centerCellCount = d.FindElements(By.CssSelector("div.ag-center-cols-container [col-id='ltp']")).Count;
+                var pinnedRowCount = d.FindElements(By.CssSelector("div.ag-pinned-left-cols-container div[role='row']")).Count;
+                var centerRowCount = d.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row']")).Count;
+                return centerCellCount > 0 && pinnedRowCount == centerRowCount;
+            });
         }
         catch (WebDriverTimeoutException)
         {
-            Console.WriteLine($"No rows appeared in the {assetClassTabText} Live table within {_settings.TimeoutSeconds}s — treating as empty.");
+            Console.WriteLine($"No rows appeared in the {assetClassTabText} Live table within {_settings.TimeoutSeconds}s (or pinned/center rows never matched) — treating as empty.");
             return new List<ResearchItem>();
         }
 

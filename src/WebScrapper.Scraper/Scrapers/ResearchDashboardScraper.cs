@@ -65,9 +65,9 @@ public class ResearchDashboardScraper : IDisposable
     /// the scrip name column, center for the rest), so rows are matched up by their shared
     /// "row-index" attribute. MUI's generated class names (mui-xxxxx) are unstable across
     /// builds, so extraction relies on ag-Grid's stable "col-id" attributes and the fixed
-    /// ordering of the &lt;p&gt; text lines within each cell instead. NOTE: ag-Grid virtualizes
-    /// rows, so only rows currently scrolled into view are present in the DOM — scrolling the
-    /// grid body would be needed to collect more.
+    /// ordering of the &lt;p&gt; text lines within each cell instead. ag-Grid virtualizes rows
+    /// (only rows scrolled into view exist in the DOM), so the grid body is scrolled
+    /// programmatically to collect every row, not just the initially visible ones.
     /// </summary>
     public List<ResearchItem> ScrapeResearch()
     {
@@ -130,6 +130,69 @@ public class ResearchDashboardScraper : IDisposable
             return new List<ResearchItem>();
         }
 
+        // ag-Grid virtualizes rows: only rows currently scrolled into view exist in the DOM,
+        // and row-index gets recycled for different data as the grid scrolls. So collect into
+        // a dictionary keyed by the row's own data (Symbol+RecoPrice+Timestamp), not row-index,
+        // and repeatedly extract-then-scroll until reaching the bottom or no new rows appear.
+        var scrollContainer = gridRoot.FindElement(By.CssSelector(".ag-body-viewport"));
+        var js = (IJavaScriptExecutor)_driver;
+        var collected = new Dictionary<string, ResearchItem>();
+        var debugDumped = false;
+        var previousCount = -1;
+        var stableIterations = 0;
+        const int maxStableIterations = 3;
+
+        while (true)
+        {
+            ExtractVisibleRows(gridRoot, assetClassTabText, collected, ref debugDumped);
+
+            if (_settings.MaxRows is int maxRows && collected.Count >= maxRows)
+            {
+                Console.WriteLine($"Reached MaxRows={maxRows}, stopping scroll.");
+                break;
+            }
+
+            if (collected.Count == previousCount)
+            {
+                stableIterations++;
+                if (stableIterations >= maxStableIterations)
+                {
+                    Console.WriteLine("No new rows after several scrolls — assuming end of list.");
+                    break;
+                }
+            }
+            else
+            {
+                stableIterations = 0;
+            }
+            previousCount = collected.Count;
+
+            var atBottom = (bool)(js.ExecuteScript(
+                "var el = arguments[0]; return (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 2);",
+                scrollContainer) ?? false);
+
+            if (atBottom)
+            {
+                Console.WriteLine("Reached bottom of grid.");
+                break;
+            }
+
+            js.ExecuteScript("arguments[0].scrollTop += arguments[0].clientHeight;", scrollContainer);
+            Thread.Sleep(600); // let ag-Grid render newly virtualized rows after the scroll
+        }
+
+        var items = _settings.MaxRows is int cap ? collected.Values.Take(cap).ToList() : collected.Values.ToList();
+        Console.WriteLine($"Extracted {items.Count} unique item(s) from {assetClassTabText}.");
+        return items;
+    }
+
+    /// <summary>
+    /// Reads whatever rows are currently rendered in the grid and merges newly seen ones
+    /// (keyed by Symbol+RecoPrice+Timestamp) into <paramref name="collected"/>. Safe to call
+    /// repeatedly across scroll positions — rows already collected are silently skipped.
+    /// </summary>
+    private void ExtractVisibleRows(IWebElement gridRoot, string assetClassTabText, Dictionary<string, ResearchItem> collected, ref bool debugDumped)
+    {
         // Grouped (not ToDictionary) because ag-Grid can include non-data rows (e.g. a
         // full-width loading/overlay row) that share an empty row-index — ToDictionary would
         // throw on the duplicate key and abort before a single row gets extracted.
@@ -137,18 +200,7 @@ public class ResearchDashboardScraper : IDisposable
             .FindElements(By.CssSelector("div.ag-pinned-left-cols-container div[role='row']"))
             .GroupBy(row => row.GetAttribute("row-index") ?? string.Empty)
             .ToDictionary(g => g.Key, g => g.First());
-        IReadOnlyList<IWebElement> centerRows = gridRoot.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row']"));
-
-        Console.WriteLine($"Found {pinnedRowsByIndex.Count} pinned row(s), {centerRows.Count} center row(s).");
-
-        if (_settings.MaxRows is int maxRows)
-        {
-            centerRows = centerRows.Take(maxRows).ToList();
-            Console.WriteLine($"Capped to first {centerRows.Count} row(s) (MaxRows={maxRows}).");
-        }
-
-        var items = new List<ResearchItem>();
-        var debugDumped = false;
+        var centerRows = gridRoot.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row']"));
 
         foreach (var centerRow in centerRows)
         {
@@ -158,7 +210,7 @@ public class ResearchDashboardScraper : IDisposable
             {
                 if (!pinnedRowsByIndex.TryGetValue(rowIndex, out var pinnedRow))
                 {
-                    Console.WriteLine($"  Skipped row-index={rowIndex}: no matching pinned row (pinned has: [{string.Join(", ", pinnedRowsByIndex.Keys)}]).");
+                    // Expected transiently while the pinned column catches up mid-scroll.
                     continue;
                 }
 
@@ -186,9 +238,7 @@ public class ResearchDashboardScraper : IDisposable
                 if (scripNameCells.Count == 0 || ltpCells.Count == 0 || returnsCells.Count == 0)
                 {
                     // Row div exists but ag-Grid hasn't finished populating its cells yet; skip it
-                    // rather than crash — a re-run (or a longer wait upstream) will pick it up.
-                    Console.WriteLine($"  Skipped row-index={rowIndex}: cells not ready (scripName={scripNameCells.Count}, ltp={ltpCells.Count}, returns={returnsCells.Count}).");
-
+                    // rather than crash — the next extraction pass will pick it up.
                     if (!debugDumped)
                     {
                         debugDumped = true;
@@ -223,19 +273,17 @@ public class ResearchDashboardScraper : IDisposable
                     Action = TryGetText(returnsCell, "button"),
                 };
 
-                Console.WriteLine($"  [{assetClassTabText}] {item.Symbol} | Reco Date: {item.Timestamp} | LTP: {item.Ltp} | Reco Price: {item.RecoPrice}");
-                items.Add(item);
+                var key = $"{item.Symbol}|{item.RecoPrice}|{item.Timestamp}";
+                if (collected.TryAdd(key, item))
+                {
+                    Console.WriteLine($"  [{assetClassTabText}] {item.Symbol} | Reco Date: {item.Timestamp} | LTP: {item.Ltp} | Reco Price: {item.RecoPrice}");
+                }
             }
             catch (StaleElementReferenceException)
             {
-                // ag-Grid recycled this row's DOM node mid-read (e.g. a live price update);
-                // skip it rather than aborting the whole tab.
-                Console.WriteLine($"  Skipped row-index={rowIndex}: it was recycled by the grid while reading.");
+                // ag-Grid recycled this row's DOM node mid-read (e.g. while scrolling); skip it.
             }
         }
-
-        Console.WriteLine($"Extracted {items.Count} item(s) from {assetClassTabText}.");
-        return items;
     }
 
     private static string? TryGetText(IWebElement scope, string cssSelector)

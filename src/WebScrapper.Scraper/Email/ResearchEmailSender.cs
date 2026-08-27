@@ -24,6 +24,22 @@ public static class ResearchEmailSender
         client.Disconnect(true);
     }
 
+    /// <summary>Sends a plain-text notification, e.g. when the scraper stops or crashes.</summary>
+    public static void SendNotification(EmailSettings settings, string body)
+    {
+        var message = new MimeMessage();
+        message.From.Add(MailboxAddress.Parse(settings.SenderEmail));
+        message.To.Add(MailboxAddress.Parse(settings.RecipientEmail));
+        message.Subject = "HdfcSec-Scrapper-Error";
+        message.Body = new TextPart("plain") { Text = body };
+
+        using var client = new SmtpClient();
+        client.Connect(settings.SmtpHost, settings.SmtpPort, SecureSocketOptions.StartTls);
+        client.Authenticate(settings.SenderEmail, settings.SenderAppPassword);
+        client.Send(message);
+        client.Disconnect(true);
+    }
+
     private static string BuildSubject(string scrapeTarget, string fallback) => scrapeTarget.ToLowerInvariant() switch
     {
         "fno" => "F&O Added - HdfcSec",

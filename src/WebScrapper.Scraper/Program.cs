@@ -18,40 +18,77 @@ var emailSettings = configuration.GetSection("Email").Get<EmailSettings>() ?? ne
 var statePath = Path.Combine(AppContext.BaseDirectory, "data", "research-state.json");
 var pollInterval = TimeSpan.FromMinutes(2);
 
-using var scraper = new ResearchDashboardScraper(settings);
-scraper.Login();
-
-while (true)
+void NotifyIfEnabled(string body)
 {
+    if (!emailSettings.Enabled)
+    {
+        return;
+    }
+
     try
     {
-        var items = scraper.ScrapeResearch();
-        var currentByKey = items.ToDictionary(ResearchStateStore.DedupeKey);
-        var previousByKey = ResearchStateStore.Load(statePath);
-
-        var added = currentByKey.Keys.Except(previousByKey.Keys).Select(k => currentByKey[k]).ToList();
-        var removed = previousByKey.Keys.Except(currentByKey.Keys).Select(k => previousByKey[k]).ToList();
-
-        Console.WriteLine($"[{DateTime.Now:T}] Scraped {items.Count} item(s) — {added.Count} added, {removed.Count} removed.");
-
-        if (added.Count > 0 || removed.Count > 0)
-        {
-            if (emailSettings.Enabled)
-            {
-                ResearchEmailSender.SendChanges(emailSettings, settings.ScrapeTarget, added, removed);
-                Console.WriteLine($"Emailed changes to {emailSettings.RecipientEmail}.");
-            }
-
-            ResearchStateStore.Save(statePath, currentByKey.Values);
-        }
+        ResearchEmailSender.SendNotification(emailSettings, body);
     }
-    catch (Exception ex)
+    catch (Exception emailEx)
     {
-        // Keep the polling loop alive across transient failures (network blip, page hiccup)
-        // instead of letting one bad iteration kill the whole long-running process.
-        Console.WriteLine($"[{DateTime.Now:T}] Scrape iteration failed: {ex.Message}");
+        Console.WriteLine($"Failed to send notification email: {emailEx.Message}");
     }
+}
 
-    Console.WriteLine($"Waiting {pollInterval.TotalMinutes:0.#} min(s) for next cycle...");
-    Thread.Sleep(pollInterval);
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true; // handle shutdown ourselves so the notification email finishes first.
+    Console.WriteLine("Stopping (Ctrl+C)...");
+    NotifyIfEnabled($"HdfcSec scraper stopped by user (Ctrl+C) at {DateTime.Now}.");
+    Environment.Exit(0);
+};
+
+using var scraper = new ResearchDashboardScraper(settings);
+
+try
+{
+    scraper.Login();
+
+    while (true)
+    {
+        try
+        {
+            var items = scraper.ScrapeResearch();
+            var currentByKey = items.ToDictionary(ResearchStateStore.DedupeKey);
+            var previousByKey = ResearchStateStore.Load(statePath);
+
+            var added = currentByKey.Keys.Except(previousByKey.Keys).Select(k => currentByKey[k]).ToList();
+            var removed = previousByKey.Keys.Except(currentByKey.Keys).Select(k => previousByKey[k]).ToList();
+
+            Console.WriteLine($"[{DateTime.Now:T}] Scraped {items.Count} item(s) — {added.Count} added, {removed.Count} removed.");
+
+            if (added.Count > 0 || removed.Count > 0)
+            {
+                if (emailSettings.Enabled)
+                {
+                    ResearchEmailSender.SendChanges(emailSettings, settings.ScrapeTarget, added, removed);
+                    Console.WriteLine($"Emailed changes to {emailSettings.RecipientEmail}.");
+                }
+
+                ResearchStateStore.Save(statePath, currentByKey.Values);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Keep the polling loop alive across transient failures (network blip, page hiccup)
+            // instead of letting one bad iteration kill the whole long-running process.
+            Console.WriteLine($"[{DateTime.Now:T}] Scrape iteration failed: {ex.Message}");
+            NotifyIfEnabled($"HdfcSec scraper iteration failed at {DateTime.Now}:\n\n{ex}");
+        }
+
+        Console.WriteLine($"Waiting {pollInterval.TotalMinutes:0.#} min(s) for next cycle...");
+        Thread.Sleep(pollInterval);
+    }
+}
+catch (Exception ex)
+{
+    // Anything that escapes the loop's own try/catch (e.g. during Login()) is fatal.
+    Console.WriteLine($"[{DateTime.Now:T}] Scraper crashed: {ex}");
+    NotifyIfEnabled($"HdfcSec scraper crashed at {DateTime.Now}:\n\n{ex}");
+    throw;
 }

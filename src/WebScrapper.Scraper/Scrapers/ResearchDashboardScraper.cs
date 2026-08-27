@@ -111,26 +111,28 @@ public class ResearchDashboardScraper : IDisposable
         var liveTab = _wait.Until(d => d.FindElement(By.XPath("//button[@role='tab' and contains(., 'Live')]")));
         liveTab.Click();
 
-        // LTP/Reco Price/Potential Returns don't actually (re)load on the first click of the
-        // tab — the site itself requires a second click to trigger the data fetch. Without
-        // this, the grid renders row structure (scrip name populated) but ltp/returns cells
-        // stay permanently empty, no matter how long we wait or retry reading them.
-        Console.WriteLine("Clicking 'Live' sub-tab again to trigger LTP refresh...");
-        liveTab.Click();
+        Console.WriteLine("Locating the research grid (the page has other ag-Grid instances, e.g. a watchlist widget)...");
+        // The dashboard page hosts more than one ag-Grid instance (a watchlist/search widget
+        // was observed mixed in). Unscoped row/cell queries pull rows from ALL of them combined
+        // — row-indexes from different grids collide (both can have a "row-index=0"), so a
+        // pinned-vs-center row built from unscoped queries can end up matching across grids
+        // entirely, which is why ltp/returns cells looked permanently missing regardless of
+        // how long we waited or retried. Scope every subsequent query to the one grid whose
+        // headers include "scripName", which is unique to the research table.
+        var gridRoot = _wait.Until(d => d.FindElement(
+            By.XPath("//div[contains(@class,'ag-root-wrapper')][.//*[@col-id='scripName']]")));
 
         Console.WriteLine("Waiting for grid rows to render...");
         // Wait for row-index 0's ltp cell specifically to have actual text — not just "some
-        // ltp cell exists anywhere". Right after a tab switch, ag-Grid can populate cells for
-        // some rows well before others (observed: row-indexes 0-3 still had empty ltp/returns
-        // cells while other rows among the 10 rendered did not), so a generic "count > 0"
-        // check can pass while the specific rows we're about to read are still empty shells.
+        // ltp cell exists anywhere" — since ag-Grid can populate cells for some rows before
+        // others right after a tab switch.
         // If the Live table is empty, there's nothing to wait for — time out gracefully
         // (within the configured TimeoutSeconds) instead of throwing.
         try
         {
-            _wait.Until(d =>
+            _wait.Until(_ =>
             {
-                var firstLtpCell = d.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row'][row-index='0'] [col-id='ltp']")).FirstOrDefault();
+                var firstLtpCell = gridRoot.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row'][row-index='0'] [col-id='ltp']")).FirstOrDefault();
                 return firstLtpCell != null && !string.IsNullOrWhiteSpace(firstLtpCell.Text);
             });
         }
@@ -143,11 +145,11 @@ public class ResearchDashboardScraper : IDisposable
         // Grouped (not ToDictionary) because ag-Grid can include non-data rows (e.g. a
         // full-width loading/overlay row) that share an empty row-index — ToDictionary would
         // throw on the duplicate key and abort before a single row gets extracted.
-        var pinnedRowsByIndex = _driver
+        var pinnedRowsByIndex = gridRoot
             .FindElements(By.CssSelector("div.ag-pinned-left-cols-container div[role='row']"))
             .GroupBy(row => row.GetAttribute("row-index") ?? string.Empty)
             .ToDictionary(g => g.Key, g => g.First());
-        IReadOnlyList<IWebElement> centerRows = _driver.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row']"));
+        IReadOnlyList<IWebElement> centerRows = gridRoot.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row']"));
 
         Console.WriteLine($"Found {pinnedRowsByIndex.Count} pinned row(s), {centerRows.Count} center row(s).");
 

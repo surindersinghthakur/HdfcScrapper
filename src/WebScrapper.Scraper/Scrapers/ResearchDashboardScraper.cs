@@ -112,13 +112,20 @@ public class ResearchDashboardScraper : IDisposable
         liveTab.Click();
 
         Console.WriteLine("Waiting for grid rows to render...");
-        // Wait for the actual cells, not just the row containers: ag-Grid inserts row divs
-        // before populating their cells, so checking row count alone is a race condition.
+        // Wait for row-index 0's ltp cell specifically to have actual text — not just "some
+        // ltp cell exists anywhere". Right after a tab switch, ag-Grid can populate cells for
+        // some rows well before others (observed: row-indexes 0-3 still had empty ltp/returns
+        // cells while other rows among the 10 rendered did not), so a generic "count > 0"
+        // check can pass while the specific rows we're about to read are still empty shells.
         // If the Live table is empty, there's nothing to wait for — time out gracefully
         // (within the configured TimeoutSeconds) instead of throwing.
         try
         {
-            _wait.Until(d => d.FindElements(By.CssSelector("div.ag-center-cols-container [col-id='ltp']")).Count > 0);
+            _wait.Until(d =>
+            {
+                var firstLtpCell = d.FindElements(By.CssSelector("div.ag-center-cols-container div[role='row'][row-index='0'] [col-id='ltp']")).FirstOrDefault();
+                return firstLtpCell != null && !string.IsNullOrWhiteSpace(firstLtpCell.Text);
+            });
         }
         catch (WebDriverTimeoutException)
         {

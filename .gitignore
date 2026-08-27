@@ -1,0 +1,19 @@
+## .NET
+bin/
+obj/
+*.user
+
+## Selenium / Chrome profile
+src/WebScrapper.Scraper/chrome-profile/
+
+## Local secrets - never commit real credentials
+appsettings.local.json
+
+## IDE
+.vs/
+.vscode/
+*.suo
+
+## OS
+.DS_Store
+Thumbs.db

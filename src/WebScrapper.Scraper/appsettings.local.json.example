@@ -1,0 +1,11 @@
+{
+  "Scraper": {
+    "Username": "your-username",
+    "Password": "your-password"
+  },
+  "Email": {
+    "Enabled": true,
+    "SenderEmail": "your-gmail-address@gmail.com",
+    "SenderAppPassword": "your-16-char-app-password"
+  }
+}

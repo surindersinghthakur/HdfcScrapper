@@ -162,7 +162,7 @@ try
     // Diffs, enriches, and notifies for one batch (e.g. Options or Futures) independently,
     // merging its current items into combinedState so the final save reflects the full picture
     // even though each batch is processed (and emailed/WhatsApped) as its own separate step.
-    void ProcessBatch(string label, List<ResearchItem> currentItems, Dictionary<string, ResearchItem> previousByKey, Dictionary<string, ResearchItem> combinedState)
+    void ProcessBatch(string label, string instrumentType, List<ResearchItem> currentItems, Dictionary<string, ResearchItem> previousByKey, Dictionary<string, ResearchItem> combinedState)
     {
         var currentByKey = currentItems.ToDictionary(ResearchStateStore.DedupeKey);
         foreach (var (key, value) in currentByKey)
@@ -170,8 +170,17 @@ try
             combinedState[key] = value;
         }
 
-        var added = currentByKey.Keys.Except(previousByKey.Keys).Select(k => currentByKey[k]).ToList();
-        var removed = previousByKey.Keys.Except(currentByKey.Keys).Select(k => previousByKey[k]).ToList();
+        // previousByKey holds the FULL combined snapshot from last cycle (Options and Future
+        // together) -- diffing this batch's current items against all of it would make every
+        // previously-known item of the OTHER type look "removed" simply because this batch's
+        // currentByKey never contains any of that type to begin with. Only compare against the
+        // slice of the previous snapshot that's the same instrument type as this batch.
+        var previousOfType = previousByKey
+            .Where(kv => string.Equals(kv.Value.InstrumentType, instrumentType, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        var added = currentByKey.Keys.Except(previousOfType.Keys).Select(k => currentByKey[k]).ToList();
+        var removed = previousOfType.Keys.Except(currentByKey.Keys).Select(k => previousOfType[k]).ToList();
 
         Console.WriteLine($"[{DateTime.Now:T}] {label}: scraped {currentItems.Count} item(s) — {added.Count} added, {removed.Count} removed.");
 
@@ -241,12 +250,13 @@ try
             // Options (or Stocks) is scraped, diffed, and notified first and in full before
             // Futures is even scraped -- two entirely separate passes, not a combined result.
             var primaryItems = scraper.ScrapeResearch();
-            ProcessBatch(isStocks ? "Stocks" : "FnO-Options", primaryItems, previousByKey, combinedState);
+            var primaryInstrumentType = isStocks ? "Stocks" : "Options";
+            ProcessBatch(isStocks ? "Stocks" : "FnO-Options", primaryInstrumentType, primaryItems, previousByKey, combinedState);
 
             if (!isStocks)
             {
                 var futureItems = scraper.ScrapeFutures();
-                ProcessBatch("FnO-Future", futureItems, previousByKey, combinedState);
+                ProcessBatch("FnO-Future", "Future", futureItems, previousByKey, combinedState);
             }
 
             ResearchStateStore.Save(statePath, combinedState.Values);

@@ -104,13 +104,11 @@ public class ResearchDashboardScraper : IDisposable
         }
 
         var items = ScrapeCurrentGridState(gridRoot, assetClassTabText);
+        var instrumentType = assetClassTabText == "F&O" ? "Options" : "Stocks";
 
-        if (assetClassTabText == "F&O")
+        foreach (var item in items)
         {
-            foreach (var item in items)
-            {
-                item.InstrumentType = "Options";
-            }
+            item.InstrumentType = instrumentType;
         }
 
         return items;

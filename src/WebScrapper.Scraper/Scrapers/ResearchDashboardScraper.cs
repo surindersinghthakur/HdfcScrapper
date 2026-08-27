@@ -111,6 +111,39 @@ public class ResearchDashboardScraper : IDisposable
         var gridRoot = _wait.Until(d => d.FindElement(
             By.XPath("//div[contains(@class,'ag-root-wrapper')][.//*[@col-id='scripName']]")));
 
+        var items = ScrapeCurrentGridState(gridRoot, assetClassTabText);
+
+        if (assetClassTabText == "F&O")
+        {
+            // F&O has an instrument-type dropdown (same row as the Live/Closed tabs) that
+            // defaults to "Options" — it must be switched to "Future" and scraped separately;
+            // it's a different data set, not just a filter on the same rows.
+            Console.WriteLine("Switching F&O instrument type dropdown to 'Future'...");
+            SelectFnoInstrumentType("Future");
+            gridRoot = _wait.Until(d => d.FindElement(
+                By.XPath("//div[contains(@class,'ag-root-wrapper')][.//*[@col-id='scripName']]")));
+            items.AddRange(ScrapeCurrentGridState(gridRoot, assetClassTabText));
+        }
+
+        return items;
+    }
+
+    /// <summary>Clicks open the F&amp;O instrument-type dropdown and selects the given option by text.</summary>
+    private void SelectFnoInstrumentType(string optionText)
+    {
+        _wait.Until(d => d.FindElement(By.CssSelector(".styles-module_select_header__cCrU4"))).Click();
+        _wait.Until(d => d.FindElement(By.XPath($"//div[contains(@class,'dd_select_option') and normalize-space(text())='{optionText}']"))).Click();
+    }
+
+    /// <summary>
+    /// Waits for the grid to render, then scrolls it to collect every row. ag-Grid virtualizes
+    /// rows: only rows currently scrolled into view exist in the DOM, and row-index gets
+    /// recycled for different data as the grid scrolls. So rows are collected into a dictionary
+    /// keyed by the row's own data (Symbol+RecoPrice+Timestamp), not row-index, and extraction
+    /// repeats after each scroll until reaching the bottom or a few scrolls produce no new rows.
+    /// </summary>
+    private List<ResearchItem> ScrapeCurrentGridState(IWebElement gridRoot, string assetClassTabText)
+    {
         Console.WriteLine("Waiting for grid rows to render...");
         // Wait for row-index 0's ltp cell specifically to have actual text — not just "some
         // ltp cell exists anywhere" — since ag-Grid can populate cells for some rows before
@@ -131,10 +164,6 @@ public class ResearchDashboardScraper : IDisposable
             return new List<ResearchItem>();
         }
 
-        // ag-Grid virtualizes rows: only rows currently scrolled into view exist in the DOM,
-        // and row-index gets recycled for different data as the grid scrolls. So collect into
-        // a dictionary keyed by the row's own data (Symbol+RecoPrice+Timestamp), not row-index,
-        // and repeatedly extract-then-scroll until reaching the bottom or no new rows appear.
         var scrollContainer = gridRoot.FindElement(By.CssSelector(".ag-body-viewport"));
         var js = (IJavaScriptExecutor)_driver;
         var collected = new Dictionary<string, ResearchItem>();

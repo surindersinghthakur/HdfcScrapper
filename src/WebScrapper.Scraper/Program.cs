@@ -82,6 +82,8 @@ try
     scraper.Login();
 
     var overrideCloseTime = false;
+    var consecutiveFailures = 0;
+    var maxBackoff = TimeSpan.FromMinutes(10);
 
     while (true)
     {
@@ -140,6 +142,8 @@ try
 
                 ResearchStateStore.Save(statePath, currentByKey.Values);
             }
+
+            consecutiveFailures = 0;
         }
         catch (Exception ex)
         {
@@ -147,9 +151,21 @@ try
             // instead of letting one bad iteration kill the whole long-running process.
             Console.WriteLine($"[{DateTime.Now:T}] Scrape iteration failed: {ex.Message}");
             NotifyIfEnabled($"HdfcSec scraper iteration failed at {DateTime.Now}:\n\n{ex}");
+            consecutiveFailures++;
         }
 
-        WaitForNextCycle(pollInterval);
+        // Back off after repeated failures (slow/flaky internet or site) instead of hammering
+        // it every minute; reset to the normal interval as soon as a scrape succeeds again.
+        var waitTime = consecutiveFailures == 0
+            ? pollInterval
+            : TimeSpan.FromSeconds(Math.Min(pollInterval.TotalSeconds * Math.Pow(2, consecutiveFailures), maxBackoff.TotalSeconds));
+
+        if (consecutiveFailures > 0)
+        {
+            Console.WriteLine($"{consecutiveFailures} consecutive failure(s) — backing off to {waitTime.TotalMinutes:0.#} min before retrying.");
+        }
+
+        WaitForNextCycle(waitTime);
     }
 }
 catch (Exception ex)

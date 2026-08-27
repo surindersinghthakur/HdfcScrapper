@@ -120,7 +120,12 @@ public class ResearchDashboardScraper : IDisposable
             // it's a different data set, not just a filter on the same rows.
             Console.WriteLine("Switching F&O instrument type dropdown to 'Future'...");
             SelectFnoInstrumentType("Future");
-            gridRoot = _wait.Until(d => d.FindElement(
+
+            // Switching instrument type likely tears down and refetches the whole grid (a real
+            // data reload, not just a client-side filter), which can take longer than a typical
+            // tab click — give it more room than the usual TimeoutSeconds before giving up.
+            var longWait = new WebDriverWait(_driver, TimeSpan.FromSeconds(Math.Max(_settings.TimeoutSeconds, 60)));
+            gridRoot = longWait.Until(d => d.FindElement(
                 By.XPath("//div[contains(@class,'ag-root-wrapper')][.//*[@col-id='scripName']]")));
             items.AddRange(ScrapeCurrentGridState(gridRoot, assetClassTabText));
         }
@@ -133,6 +138,12 @@ public class ResearchDashboardScraper : IDisposable
     {
         _wait.Until(d => d.FindElement(By.CssSelector(".styles-module_select_header__cCrU4"))).Click();
         _wait.Until(d => d.FindElement(By.XPath($"//div[contains(@class,'dd_select_option') and normalize-space(text())='{optionText}']"))).Click();
+
+        // Confirm the dropdown's own label actually updated before waiting on the grid reload —
+        // if the click didn't register, waiting on the grid separately would just time out with
+        // no clue why.
+        _wait.Until(d => d.FindElement(By.CssSelector(".styles-module_dropdown_label_value__tix5s")).Text == optionText);
+        Console.WriteLine($"  Dropdown now shows '{optionText}'.");
     }
 
     /// <summary>

@@ -134,6 +134,11 @@ public class ResearchDashboardScraper : IDisposable
 
         if (assetClassTabText == "F&O")
         {
+            foreach (var item in items)
+            {
+                item.InstrumentType = "Options";
+            }
+
             // F&O has an instrument-type dropdown (same row as the Live/Closed tabs) that
             // defaults to "Options" — it must be switched to "Future" and scraped separately;
             // it's a different data set, not just a filter on the same rows.
@@ -153,7 +158,12 @@ public class ResearchDashboardScraper : IDisposable
             }
             else
             {
-                items.AddRange(ScrapeCurrentGridState(futureGridRoot, assetClassTabText));
+                var futureItems = ScrapeCurrentGridState(futureGridRoot, assetClassTabText);
+                foreach (var item in futureItems)
+                {
+                    item.InstrumentType = "Future";
+                }
+                items.AddRange(futureItems);
             }
         }
 
@@ -467,6 +477,15 @@ public class ResearchDashboardScraper : IDisposable
         _driver.Navigate().GoToUrl(_settings.TargetUrl);
         _wait.Until(d => d.FindElement(By.XPath($"//button[@role='tab' and contains(., '{assetClassTabText}')]"))).Click();
         _wait.Until(d => d.FindElement(By.XPath("//button[@role='tab' and contains(., 'Live')]"))).Click();
+
+        if (string.Equals(item.InstrumentType, "Future", StringComparison.OrdinalIgnoreCase))
+        {
+            // This item came from the Future dataset, but a fresh navigation always defaults
+            // the dropdown back to Options — without this, the row search below scrolls through
+            // the wrong dataset entirely and never finds it.
+            Console.WriteLine("  Switching dropdown to 'Future' to locate this item...");
+            SelectFnoInstrumentType("Future");
+        }
 
         var gridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
         if (gridRoot == null)

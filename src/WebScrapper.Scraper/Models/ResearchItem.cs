@@ -14,6 +14,11 @@ public class ResearchItem
     public string? Duration { get; set; }
     public string? Action { get; set; }
 
+    /// <summary>"Options" or "Future" for F&amp;O items (null for Stocks). Lets EnrichWithDetails
+    /// know which instrument-type dropdown value to select before re-locating this item, since
+    /// re-navigating to the research page always defaults back to "Options".</summary>
+    public string? InstrumentType { get; set; }
+
     // From the per-item detail page. Common to both F&O and Stocks (Stoploss may not always
     // be present); left null when a section doesn't exist rather than treated as an error.
     public string? TargetPrice { get; set; }

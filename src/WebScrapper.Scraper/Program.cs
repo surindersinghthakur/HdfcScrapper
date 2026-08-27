@@ -193,11 +193,14 @@ try
 
             if (added.Count > 0 || removed.Count > 0)
             {
-                if (emailSettings.Enabled)
+                if (emailSettings.Enabled || whatsAppSettings.Enabled)
                 {
                     // Only fetch each item's detail page (Target Price / valid-till / stoploss)
                     // for genuinely new picks -- doing this for every row on every scrape would
                     // mean a navigate-click-extract-back round trip per row, which doesn't scale.
+                    // Needed for either notification channel, not just email -- a removed item
+                    // can only ever show whatever was captured here when it was originally added,
+                    // since by the time it's removed there's no row left in the grid to click into.
                     foreach (var item in added)
                     {
                         try
@@ -209,7 +212,10 @@ try
                             Console.WriteLine($"Failed to fetch detail fields for {item.Symbol}: {ex.Message}");
                         }
                     }
+                }
 
+                if (emailSettings.Enabled)
+                {
                     ResearchEmailSender.SendChanges(emailSettings, settings.ScrapeTarget, added, removed);
                     Console.WriteLine($"Emailed changes to {emailSettings.RecipientEmail}.");
                 }

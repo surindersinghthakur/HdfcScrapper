@@ -86,7 +86,7 @@ This is only called for items that are actually **new** since the last poll — 
 
 ## Polling loop
 
-`Program.cs` logs in once, then loops forever: scrape → diff against the last snapshot → enrich new items with detail-page fields → email if changed → save the new snapshot → wait 1 minute (or press Enter to trigger the next cycle immediately) → repeat. A failed iteration (network blip, page hiccup) is logged, emailed as a notification, and skipped rather than crashing the whole process. Ctrl+C and any fatal crash also send a notification email before exiting.
+`Program.cs` logs in once, then loops forever. Each cycle runs as **two fully separate passes** when `ScrapeTarget` is `"FnO"` — Options first (scrape → diff → enrich new items → email/WhatsApp if changed), then Futures (its own scrape → diff → enrich → email/WhatsApp) — each with its own subject line and message, not merged into one notification. (`ScrapeTarget: "Stocks"` is just a single pass, no Futures concept.) Both passes' current items are merged into one combined snapshot saved at the end of the cycle. Then: wait 1 minute (or press Enter to trigger the next cycle immediately) → repeat. A failed iteration (network blip, page hiccup) is logged, emailed as a notification, and skipped rather than crashing the whole process. Ctrl+C and any fatal crash also send a notification email before exiting.
 
 Each scraped `ResearchItem` carries a `ScrapedAtUtc` timestamp (in addition to the site's own displayed `Timestamp`), so both the local snapshot and any email show when each row was actually captured.
 

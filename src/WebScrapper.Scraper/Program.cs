@@ -159,6 +159,58 @@ try
     var consecutiveFailures = 0;
     var maxBackoff = TimeSpan.FromMinutes(10);
 
+    // Diffs, enriches, and notifies for one batch (e.g. Options or Futures) independently,
+    // merging its current items into combinedState so the final save reflects the full picture
+    // even though each batch is processed (and emailed/WhatsApped) as its own separate step.
+    void ProcessBatch(string label, List<ResearchItem> currentItems, Dictionary<string, ResearchItem> previousByKey, Dictionary<string, ResearchItem> combinedState)
+    {
+        var currentByKey = currentItems.ToDictionary(ResearchStateStore.DedupeKey);
+        foreach (var (key, value) in currentByKey)
+        {
+            combinedState[key] = value;
+        }
+
+        var added = currentByKey.Keys.Except(previousByKey.Keys).Select(k => currentByKey[k]).ToList();
+        var removed = previousByKey.Keys.Except(currentByKey.Keys).Select(k => previousByKey[k]).ToList();
+
+        Console.WriteLine($"[{DateTime.Now:T}] {label}: scraped {currentItems.Count} item(s) — {added.Count} added, {removed.Count} removed.");
+
+        if (added.Count == 0 && removed.Count == 0)
+        {
+            return;
+        }
+
+        if (emailSettings.Enabled || whatsAppSettings.Enabled)
+        {
+            // Only fetch each item's detail page (Target Price / valid-till / stoploss) for
+            // genuinely new picks -- doing this for every row on every scrape would mean a
+            // navigate-click-extract-back round trip per row, which doesn't scale. A removed
+            // item can only ever show whatever was captured here when it was originally added,
+            // since by the time it's removed there's no row left in the grid to click into.
+            foreach (var item in added)
+            {
+                try
+                {
+                    scraper.EnrichWithDetails(item);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to fetch detail fields for {item.Symbol}: {ex.Message}");
+                }
+            }
+        }
+
+        if (emailSettings.Enabled)
+        {
+            ResearchEmailSender.SendChanges(emailSettings, label, added, removed);
+            Console.WriteLine($"Emailed {label} changes to {emailSettings.RecipientEmail}.");
+        }
+
+        SendWhatsAppIfEnabled(
+            web => web.SendChanges(label, added, removed),
+            () => WhatsAppNotifier.SendChanges(whatsAppSettings, label, added, removed));
+    }
+
     while (true)
     {
         if (!overrideCloseTime && TimeOnly.FromDateTime(DateTime.Now) >= marketClose)
@@ -182,51 +234,22 @@ try
 
         try
         {
-            var items = scraper.ScrapeResearch();
-            var currentByKey = items.ToDictionary(ResearchStateStore.DedupeKey);
             var previousByKey = ResearchStateStore.Load(statePath);
+            var combinedState = new Dictionary<string, ResearchItem>();
+            var isStocks = settings.ScrapeTarget.Equals("Stocks", StringComparison.OrdinalIgnoreCase);
 
-            var added = currentByKey.Keys.Except(previousByKey.Keys).Select(k => currentByKey[k]).ToList();
-            var removed = previousByKey.Keys.Except(currentByKey.Keys).Select(k => previousByKey[k]).ToList();
+            // Options (or Stocks) is scraped, diffed, and notified first and in full before
+            // Futures is even scraped -- two entirely separate passes, not a combined result.
+            var primaryItems = scraper.ScrapeResearch();
+            ProcessBatch(isStocks ? "Stocks" : "FnO-Options", primaryItems, previousByKey, combinedState);
 
-            Console.WriteLine($"[{DateTime.Now:T}] Scraped {items.Count} item(s) — {added.Count} added, {removed.Count} removed.");
-
-            if (added.Count > 0 || removed.Count > 0)
+            if (!isStocks)
             {
-                if (emailSettings.Enabled || whatsAppSettings.Enabled)
-                {
-                    // Only fetch each item's detail page (Target Price / valid-till / stoploss)
-                    // for genuinely new picks -- doing this for every row on every scrape would
-                    // mean a navigate-click-extract-back round trip per row, which doesn't scale.
-                    // Needed for either notification channel, not just email -- a removed item
-                    // can only ever show whatever was captured here when it was originally added,
-                    // since by the time it's removed there's no row left in the grid to click into.
-                    foreach (var item in added)
-                    {
-                        try
-                        {
-                            scraper.EnrichWithDetails(item);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"Failed to fetch detail fields for {item.Symbol}: {ex.Message}");
-                        }
-                    }
-                }
-
-                if (emailSettings.Enabled)
-                {
-                    ResearchEmailSender.SendChanges(emailSettings, settings.ScrapeTarget, added, removed);
-                    Console.WriteLine($"Emailed changes to {emailSettings.RecipientEmail}.");
-                }
-
-                SendWhatsAppIfEnabled(
-                    web => web.SendChanges(settings.ScrapeTarget, added, removed),
-                    () => WhatsAppNotifier.SendChanges(whatsAppSettings, settings.ScrapeTarget, added, removed));
-
-                ResearchStateStore.Save(statePath, currentByKey.Values);
+                var futureItems = scraper.ScrapeFutures();
+                ProcessBatch("FnO-Future", futureItems, previousByKey, combinedState);
             }
 
+            ResearchStateStore.Save(statePath, combinedState.Values);
             consecutiveFailures = 0;
         }
         catch (Exception ex)

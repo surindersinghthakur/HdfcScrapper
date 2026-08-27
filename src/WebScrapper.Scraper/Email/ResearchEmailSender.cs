@@ -45,6 +45,8 @@ public static class ResearchEmailSender
     private static string BuildSubject(string scrapeTarget, string fallback) => scrapeTarget.ToLowerInvariant() switch
     {
         "fno" => "F&O Added - HdfcSec",
+        "fno-options" => "F&O Options Added - HdfcSec",
+        "fno-future" => "F&O Futures Added - HdfcSec",
         "stocks" => "Stock Added - HdfcSec",
         _ => fallback,
     };

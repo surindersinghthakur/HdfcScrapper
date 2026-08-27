@@ -78,32 +78,103 @@ public class ResearchDashboardScraper : IDisposable
     /// <summary>
     /// Navigates to the research dashboard and extracts research items from the Live sub-tab
     /// of the asset-class tab selected by <see cref="ScraperSettings.ScrapeTarget"/> ("FnO" or
-    /// "Stocks"). The grid splits each row's cells across two DOM containers (pinned-left for
-    /// the scrip name column, center for the rest), so rows are matched up by their shared
-    /// "row-index" attribute. MUI's generated class names (mui-xxxxx) are unstable across
-    /// builds, so extraction relies on ag-Grid's stable "col-id" attributes and the fixed
-    /// ordering of the &lt;p&gt; text lines within each cell instead. ag-Grid virtualizes rows
-    /// (only rows scrolled into view exist in the DOM), so the grid body is scrolled
-    /// programmatically to collect every row, not just the initially visible ones.
+    /// "Stocks") — for F&amp;O this is the default "Options" instrument type only; see
+    /// <see cref="ScrapeFutures"/> for the "Future" dataset, scraped as a fully separate pass.
+    /// The grid splits each row's cells across two DOM containers (pinned-left for the scrip
+    /// name column, center for the rest), so rows are matched up by their shared "row-index"
+    /// attribute. MUI's generated class names (mui-xxxxx) are unstable across builds, so
+    /// extraction relies on ag-Grid's stable "col-id" attributes and the fixed ordering of the
+    /// &lt;p&gt; text lines within each cell instead. ag-Grid virtualizes rows (only rows
+    /// scrolled into view exist in the DOM), so the grid body is scrolled programmatically to
+    /// collect every row, not just the initially visible ones.
     /// </summary>
     public List<ResearchItem> ScrapeResearch()
     {
         Console.WriteLine($"Navigating to research dashboard: {_settings.TargetUrl}");
         _driver.Navigate().GoToUrl(_settings.TargetUrl);
 
-        var assetClassTabText = _settings.ScrapeTarget.Equals("Stocks", StringComparison.OrdinalIgnoreCase)
-            ? "Stocks"
-            : "F&O";
+        var assetClassTabText = AssetClassTabText;
+        ClickAssetAndLiveTabs(assetClassTabText);
 
-        return ScrapeAssetClassTab(assetClassTabText);
+        var gridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
+        if (gridRoot == null)
+        {
+            Console.WriteLine($"No grid appeared within 180s for {assetClassTabText} — treating as empty.");
+            return new List<ResearchItem>();
+        }
+
+        var items = ScrapeCurrentGridState(gridRoot, assetClassTabText);
+
+        if (assetClassTabText == "F&O")
+        {
+            foreach (var item in items)
+            {
+                item.InstrumentType = "Options";
+            }
+        }
+
+        return items;
     }
 
     /// <summary>
-    /// Clicks the given top-level asset-class tab (e.g. "F&amp;O" or "Stocks"), then its "Live"
-    /// sub-tab, and extracts the currently rendered ag-Grid rows. Both tabs share the same
-    /// structure.
+    /// Scrapes the F&amp;O "Future" instrument type as an entirely separate navigate-click-scrape
+    /// pass (its own page load, tab clicks, and dropdown switch) so it can be diffed and
+    /// notified independently from Options rather than merged into one combined result. Returns
+    /// an empty list when <see cref="ScraperSettings.ScrapeTarget"/> is "Stocks", since there's
+    /// no such concept there.
     /// </summary>
-    private List<ResearchItem> ScrapeAssetClassTab(string assetClassTabText)
+    public List<ResearchItem> ScrapeFutures()
+    {
+        if (_settings.ScrapeTarget.Equals("Stocks", StringComparison.OrdinalIgnoreCase))
+        {
+            return new List<ResearchItem>();
+        }
+
+        Console.WriteLine($"Navigating to research dashboard for Futures: {_settings.TargetUrl}");
+        _driver.Navigate().GoToUrl(_settings.TargetUrl);
+        ClickAssetAndLiveTabs("F&O");
+
+        try
+        {
+            Console.WriteLine("Switching F&O instrument type dropdown to 'Future'...");
+            SelectFnoInstrumentType("Future");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  Could not switch to the Future dropdown: {ex.Message}");
+            return new List<ResearchItem>();
+        }
+
+        // Switching instrument type tears down and refetches the whole grid (a real data
+        // reload, not just a client-side filter) and has been observed taking well over 60s --
+        // confirmed structurally identical to Options once it does load, so this is purely a
+        // slow load, not a selector problem. Poll with visible progress instead of a single
+        // silent wait, and skip Future for this cycle (rather than throw) if it never shows up.
+        var futureGridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
+        if (futureGridRoot == null)
+        {
+            Console.WriteLine("  Future grid never appeared within 180s — skipping Future for this cycle.");
+            return new List<ResearchItem>();
+        }
+
+        var futureItems = ScrapeCurrentGridState(futureGridRoot, "F&O");
+        foreach (var item in futureItems)
+        {
+            item.InstrumentType = "Future";
+        }
+
+        return futureItems;
+    }
+
+    private string AssetClassTabText => _settings.ScrapeTarget.Equals("Stocks", StringComparison.OrdinalIgnoreCase)
+        ? "Stocks"
+        : "F&O";
+
+    /// <summary>
+    /// Clicks the given top-level asset-class tab (e.g. "F&amp;O" or "Stocks"), then its "Live"
+    /// sub-tab. Both tabs share the same grid structure.
+    /// </summary>
+    private void ClickAssetAndLiveTabs(string assetClassTabText)
     {
         Console.WriteLine($"Clicking '{assetClassTabText}' tab...");
         // Top-level asset-class tab, must be selected before the Live/Closed sub-tabs appear.
@@ -136,64 +207,6 @@ public class ResearchDashboardScraper : IDisposable
         // entirely, which is why ltp/returns cells looked permanently missing regardless of
         // how long we waited or retried. Scope every subsequent query to the one grid whose
         // headers include "scripName", which is unique to the research table.
-        // Grid load time is apparently inconsistent — sometimes fast, sometimes well over 30s
-        // (confirmed with the F&O Future case, but evidently not exclusive to it) — so this
-        // uses the same patient, progress-logging wait rather than the plain 30s _wait.
-        var gridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
-        if (gridRoot == null)
-        {
-            Console.WriteLine($"No grid appeared within 180s for {assetClassTabText} — treating as empty.");
-            return new List<ResearchItem>();
-        }
-
-        var items = ScrapeCurrentGridState(gridRoot, assetClassTabText);
-
-        if (assetClassTabText == "F&O")
-        {
-            foreach (var item in items)
-            {
-                item.InstrumentType = "Options";
-            }
-
-            // F&O has an instrument-type dropdown (same row as the Live/Closed tabs) that
-            // defaults to "Options" — it must be switched to "Future" and scraped separately;
-            // it's a different data set, not just a filter on the same rows. Options data is
-            // the default/primary view and must always make it into the email even if Future
-            // scraping fails outright (e.g. the dropdown itself doesn't respond) — so this whole
-            // block is best-effort: log and move on, keeping the Options items collected above.
-            try
-            {
-                Console.WriteLine("Switching F&O instrument type dropdown to 'Future'...");
-                SelectFnoInstrumentType("Future");
-
-                // Switching instrument type tears down and refetches the whole grid (a real data
-                // reload, not just a client-side filter) and has been observed taking well over 60s
-                // -- confirmed structurally identical to Options once it does load, so this is purely
-                // a slow load, not a selector problem. Poll with visible progress instead of a single
-                // silent wait, and skip Future for this cycle (rather than crash the whole scrape)
-                // if it genuinely never shows up.
-                var futureGridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
-                if (futureGridRoot == null)
-                {
-                    Console.WriteLine("  Future grid never appeared within 180s — skipping Future for this cycle.");
-                }
-                else
-                {
-                    var futureItems = ScrapeCurrentGridState(futureGridRoot, assetClassTabText);
-                    foreach (var item in futureItems)
-                    {
-                        item.InstrumentType = "Future";
-                    }
-                    items.AddRange(futureItems);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"  Future scraping failed, keeping Options results only: {ex.Message}");
-            }
-        }
-
-        return items;
     }
 
     /// <summary>

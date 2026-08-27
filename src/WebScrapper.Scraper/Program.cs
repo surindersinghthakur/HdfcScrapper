@@ -52,5 +52,6 @@ while (true)
         Console.WriteLine($"[{DateTime.Now:T}] Scrape iteration failed: {ex.Message}");
     }
 
+    Console.WriteLine($"Waiting {pollInterval.TotalMinutes:0.#} min(s) for next cycle...");
     Thread.Sleep(pollInterval);
 }

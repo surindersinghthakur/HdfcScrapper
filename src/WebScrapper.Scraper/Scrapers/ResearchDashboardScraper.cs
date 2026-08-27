@@ -133,16 +133,56 @@ public class ResearchDashboardScraper : IDisposable
             Console.WriteLine("Switching F&O instrument type dropdown to 'Future'...");
             SelectFnoInstrumentType("Future");
 
-            // Switching instrument type likely tears down and refetches the whole grid (a real
-            // data reload, not just a client-side filter), which can take longer than a typical
-            // tab click — give it more room than the usual TimeoutSeconds before giving up.
-            var longWait = new WebDriverWait(_driver, TimeSpan.FromSeconds(Math.Max(_settings.TimeoutSeconds, 60)));
-            gridRoot = longWait.Until(d => d.FindElement(
-                By.XPath("//div[contains(@class,'ag-root') and @role='treegrid'][.//*[@col-id='scripName']]")));
-            items.AddRange(ScrapeCurrentGridState(gridRoot, assetClassTabText));
+            // Switching instrument type tears down and refetches the whole grid (a real data
+            // reload, not just a client-side filter) and has been observed taking well over 60s
+            // -- confirmed structurally identical to Options once it does load, so this is purely
+            // a slow load, not a selector problem. Poll with visible progress instead of a single
+            // silent wait, and skip Future for this cycle (rather than crash the whole scrape)
+            // if it genuinely never shows up.
+            var futureGridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
+            if (futureGridRoot == null)
+            {
+                Console.WriteLine("  Future grid never appeared within 180s — skipping Future for this cycle.");
+            }
+            else
+            {
+                items.AddRange(ScrapeCurrentGridState(futureGridRoot, assetClassTabText));
+            }
         }
 
         return items;
+    }
+
+    /// <summary>
+    /// Polls (with periodic progress logging) for the research grid to appear, up to the given
+    /// timeout. Returns null instead of throwing if it never does.
+    /// </summary>
+    private IWebElement? WaitForGridRootWithProgress(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow.Add(timeout);
+        var lastLog = DateTime.UtcNow;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var candidate = _driver
+                .FindElements(By.XPath("//div[contains(@class,'ag-root') and @role='treegrid'][.//*[@col-id='scripName']]"))
+                .FirstOrDefault();
+
+            if (candidate != null)
+            {
+                return candidate;
+            }
+
+            if (DateTime.UtcNow - lastLog >= TimeSpan.FromSeconds(10))
+            {
+                Console.WriteLine($"  Still waiting for the grid to load... ({(deadline - DateTime.UtcNow).TotalSeconds:0}s left)");
+                lastLog = DateTime.UtcNow;
+            }
+
+            Thread.Sleep(1000);
+        }
+
+        return null;
     }
 
     /// <summary>Clicks open the F&amp;O instrument-type dropdown and selects the given option by text.</summary>

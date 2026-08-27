@@ -120,8 +120,15 @@ public class ResearchDashboardScraper : IDisposable
         // entirely, which is why ltp/returns cells looked permanently missing regardless of
         // how long we waited or retried. Scope every subsequent query to the one grid whose
         // headers include "scripName", which is unique to the research table.
-        var gridRoot = _wait.Until(d => d.FindElement(
-            By.XPath("//div[contains(@class,'ag-root') and @role='treegrid'][.//*[@col-id='scripName']]")));
+        // Grid load time is apparently inconsistent — sometimes fast, sometimes well over 30s
+        // (confirmed with the F&O Future case, but evidently not exclusive to it) — so this
+        // uses the same patient, progress-logging wait rather than the plain 30s _wait.
+        var gridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
+        if (gridRoot == null)
+        {
+            Console.WriteLine($"No grid appeared within 180s for {assetClassTabText} — treating as empty.");
+            return new List<ResearchItem>();
+        }
 
         var items = ScrapeCurrentGridState(gridRoot, assetClassTabText);
 
@@ -461,8 +468,12 @@ public class ResearchDashboardScraper : IDisposable
         _wait.Until(d => d.FindElement(By.XPath($"//button[@role='tab' and contains(., '{assetClassTabText}')]"))).Click();
         _wait.Until(d => d.FindElement(By.XPath("//button[@role='tab' and contains(., 'Live')]"))).Click();
 
-        var gridRoot = _wait.Until(d => d.FindElement(
-            By.XPath("//div[contains(@class,'ag-root') and @role='treegrid'][.//*[@col-id='scripName']]")));
+        var gridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(180));
+        if (gridRoot == null)
+        {
+            Console.WriteLine($"  Grid never appeared within 180s — skipping detail fetch for {item.Symbol}.");
+            return;
+        }
 
         var scripNameCell = FindScripNameCellBySymbol(gridRoot, item.Symbol);
         if (scripNameCell == null)

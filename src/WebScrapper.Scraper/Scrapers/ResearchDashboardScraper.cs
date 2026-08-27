@@ -111,6 +111,13 @@ public class ResearchDashboardScraper : IDisposable
         var liveTab = _wait.Until(d => d.FindElement(By.XPath("//button[@role='tab' and contains(., 'Live')]")));
         liveTab.Click();
 
+        // LTP/Reco Price/Potential Returns don't actually (re)load on the first click of the
+        // tab — the site itself requires a second click to trigger the data fetch. Without
+        // this, the grid renders row structure (scrip name populated) but ltp/returns cells
+        // stay permanently empty, no matter how long we wait or retry reading them.
+        Console.WriteLine("Clicking 'Live' sub-tab again to trigger LTP refresh...");
+        liveTab.Click();
+
         Console.WriteLine("Waiting for grid rows to render...");
         // Wait for row-index 0's ltp cell specifically to have actual text — not just "some
         // ltp cell exists anywhere". Right after a tab switch, ag-Grid can populate cells for

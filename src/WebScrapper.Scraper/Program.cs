@@ -154,8 +154,12 @@ try
     if (TimeOnly.FromDateTime(DateTime.Now) < marketOpen)
     {
         var waitSpan = DateTime.Today.Add(marketOpen.ToTimeSpan()) - DateTime.Now;
-        Console.WriteLine($"Logged in. Waiting until market open at {marketOpen} ({waitSpan.TotalMinutes:0} min from now) — press Enter to start scraping now instead...");
+        Console.WriteLine($"Logged in. Scraping will start at {marketOpen} ({waitSpan.TotalMinutes:0} min from now) — press Enter to start scraping now instead...");
         WaitForNextCycle(waitSpan);
+    }
+    else
+    {
+        Console.WriteLine("Logged in. Market is already open — scraping starts now.");
     }
 
     var overrideCloseTime = false;

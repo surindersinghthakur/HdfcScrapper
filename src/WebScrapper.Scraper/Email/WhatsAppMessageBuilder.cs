@@ -43,6 +43,7 @@ public static class WhatsAppMessageBuilder
         sb.AppendLine($"*RecoPrice*: {item.RecoPrice}");
         sb.AppendLine($"TargetPrice: {item.TargetPrice}");
         sb.AppendLine($"LTP: {item.Ltp}");
+        sb.AppendLine($"Stoploss: {item.StoplossAt}");
     }
 
     private static readonly Regex DatePartPattern = new(@"^\d{1,2}\s+[A-Za-z]{3,}\s+\d{4}$");

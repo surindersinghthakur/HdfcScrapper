@@ -209,7 +209,10 @@ public class ResearchDashboardScraper : IDisposable
 
     /// <summary>
     /// Polls (with periodic progress logging) for the research grid to appear, up to the given
-    /// timeout. Returns null instead of throwing if it never does.
+    /// timeout. When there are zero live items, the site replaces the whole grid with a
+    /// "No active rec..." message instead of an empty ag-Grid table — that's detected quickly
+    /// (rather than burning the full timeout every time there's genuinely nothing to show) and
+    /// also returns null, same as a genuine timeout.
     /// </summary>
     private IWebElement? WaitForGridRootWithProgress(TimeSpan timeout)
     {
@@ -225,6 +228,12 @@ public class ResearchDashboardScraper : IDisposable
             if (candidate != null)
             {
                 return candidate;
+            }
+
+            if (_driver.FindElements(By.XPath("//*[contains(text(),'No active rec')]")).Count > 0)
+            {
+                Console.WriteLine("  Site shows 'No active recommendations' — treating as an empty grid.");
+                return null;
             }
 
             if (DateTime.UtcNow - lastLog >= TimeSpan.FromSeconds(10))

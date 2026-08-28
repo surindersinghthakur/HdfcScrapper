@@ -116,8 +116,21 @@ public class WhatsAppWebNotifier : IDisposable
         }
 
         var sendButton = _wait.Until(d => d.FindElement(By.CssSelector(SendButtonSelector)));
-        Console.WriteLine($"  DEBUG send button outerHTML: {sendButton.GetAttribute("outerHTML")}");
-        sendButton.Click();
+
+        // Selenium's native Click() can throw "element not interactable" here even when the
+        // button is the correct one -- WhatsApp Web's send button sits inside layered/animated
+        // wrapper divs that can trip up Selenium's visibility/overlap checks. Clicking via JS
+        // dispatches the click directly on the element without those checks.
+        try
+        {
+            sendButton.Click();
+        }
+        catch (ElementNotInteractableException)
+        {
+            Console.WriteLine("  Native click failed (element not interactable) — retrying via JavaScript click...");
+            ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].click();", sendButton);
+        }
+
         Console.WriteLine($"  Clicked send. URL now: {_driver.Url}");
     }
 

@@ -156,6 +156,14 @@ try
         var waitSpan = DateTime.Today.Add(marketOpen.ToTimeSpan()) - DateTime.Now;
         Console.WriteLine($"Logged in. Scraping will start at {marketOpen} ({waitSpan.TotalMinutes:0} min from now) — press Enter to start scraping now instead...");
         WaitForNextCycle(waitSpan);
+
+        // The wait above can be long (started well before market open) -- HDFC's session may
+        // have expired from sitting idle that whole time. Login() re-checks cheaply (a short
+        // wait for the login form) and skips through if the session is still fine, but
+        // re-authenticates (prompting for OTP again if needed) if it's not, instead of the
+        // first scrape silently hitting the login page and failing to find the F&O tab.
+        Console.WriteLine("Re-checking session before starting to scrape...");
+        scraper.Login();
     }
     else
     {

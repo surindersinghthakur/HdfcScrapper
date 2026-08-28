@@ -136,13 +136,6 @@ if (TimeOnly.FromDateTime(DateTime.Now) >= marketClose)
     return;
 }
 
-if (TimeOnly.FromDateTime(DateTime.Now) < marketOpen)
-{
-    var waitSpan = DateTime.Today.Add(marketOpen.ToTimeSpan()) - DateTime.Now;
-    Console.WriteLine($"Waiting until market open at {marketOpen} ({waitSpan.TotalMinutes:0} min from now)...");
-    Thread.Sleep(waitSpan);
-}
-
 using var scraper = new ResearchDashboardScraper(settings);
 
 if (whatsAppSettings.Enabled && useWhatsAppWeb)
@@ -152,8 +145,18 @@ if (whatsAppSettings.Enabled && useWhatsAppWeb)
 
 try
 {
+    // Login (including any OTP step) happens immediately on startup, whenever that is --
+    // not gated on market open. Start the program early, log in, and leave it running; the
+    // actual scraping below waits for market open on its own if it's still too early.
     scraper.Login();
     whatsAppWeb?.EnsureLoggedIn();
+
+    if (TimeOnly.FromDateTime(DateTime.Now) < marketOpen)
+    {
+        var waitSpan = DateTime.Today.Add(marketOpen.ToTimeSpan()) - DateTime.Now;
+        Console.WriteLine($"Logged in. Waiting until market open at {marketOpen} ({waitSpan.TotalMinutes:0} min from now) — press Enter to start scraping now instead...");
+        WaitForNextCycle(waitSpan);
+    }
 
     var overrideCloseTime = false;
     var consecutiveFailures = 0;

@@ -51,10 +51,11 @@ Chrome opens (non-headless by default) so you can solve any CAPTCHA or 2FA manua
 
 - Not a weekday → exits immediately without launching Chrome.
 - Already past close time → exits immediately.
-- Before open time → waits (no Chrome launched yet) until market open, then proceeds.
-- Once running, it stops polling and exits cleanly once close time is reached (a notification email is sent if `Email.Enabled`).
+- Otherwise, Chrome launches and login (including any OTP step) happens right away, regardless of how early it is — this lets you start the program before market open, complete login/OTP yourself, and leave it running.
+- If it's still before open time after login, it then waits (press Enter to skip the wait and start scraping immediately) until market open before the poll loop begins.
+- Once running, it stops polling and exits cleanly once close time is reached (a notification email is sent if `Email.Enabled`), or press any key at that point to keep going on demand — see [Polling loop](#polling-loop).
 
-You still start it manually each day — this isn't OS-scheduled — but you can start it any time before market open (e.g. first thing in the morning) and walk away; it'll wait for open, run all day, and stop itself at close.
+You still start it manually each day — this isn't OS-scheduled — but you can start it any time before market open (e.g. first thing in the morning), log in, and walk away; it'll wait for open, run all day, and stop itself at close.
 
 **Login on unattended days:** if `chrome-profile/`'s persisted session is still valid, `Login()` detects that the login form never appears (the site redirects straight to the dashboard) and skips straight through — no OTP, no blocking on Enter. This depends on the site's session surviving between days, which isn't guaranteed; if it doesn't, the program will block waiting for you to complete login/OTP and press Enter, same as any other run.
 

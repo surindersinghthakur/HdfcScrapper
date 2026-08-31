@@ -209,10 +209,10 @@ public class ResearchDashboardScraper : IDisposable
 
     /// <summary>
     /// Polls (with periodic progress logging) for the research grid to appear, up to the given
-    /// timeout. When there are zero live items, the site replaces the whole grid with a
-    /// "No active rec..." message instead of an empty ag-Grid table — that's detected quickly
-    /// (rather than burning the full timeout every time there's genuinely nothing to show) and
-    /// also returns null, same as a genuine timeout.
+    /// timeout. Returns null instead of throwing if it never does (including when the site is
+    /// genuinely empty — a text-based shortcut for that was tried and reverted: matching "No
+    /// active rec..." anywhere on the page is too easy to false-positive on a different tab's
+    /// leftover panel, which incorrectly treated a tab WITH real data as empty).
     /// </summary>
     private IWebElement? WaitForGridRootWithProgress(TimeSpan timeout)
     {
@@ -228,36 +228,6 @@ public class ResearchDashboardScraper : IDisposable
             if (candidate != null)
             {
                 return candidate;
-            }
-
-            // contains(., ...) (not contains(text(), ...)) so this still matches even if the
-            // message text is split across nested tags (e.g. "No active <span>recommendations</span>"),
-            // which contains(text(), ...) would miss since it only sees direct text nodes.
-            // Case-insensitive via translate() since the exact capitalization isn't confirmed.
-            // Must also check .Displayed: an inactive tab's panel (e.g. Options, hidden but not
-            // removed from the DOM while viewing Futures) can still contain this same message
-            // from when IT was empty -- an unscoped/visibility-blind match wrongly treated
-            // Futures as empty even though its own (visible) panel had real data.
-            const string LowercaseMap = "abcdefghijklmnopqrstuvwxyz";
-            const string UppercaseMap = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-            bool emptyMessageVisible;
-            try
-            {
-                emptyMessageVisible = _driver
-                    .FindElements(By.XPath($"//*[contains(translate(., '{UppercaseMap}', '{LowercaseMap}'), 'no active rec')]"))
-                    .Any(el => el.Displayed);
-            }
-            catch (StaleElementReferenceException)
-            {
-                // DOM shifted between finding these elements and checking .Displayed on them;
-                // just retry on the next poll tick rather than letting this bubble up.
-                emptyMessageVisible = false;
-            }
-
-            if (emptyMessageVisible)
-            {
-                Console.WriteLine("  Site shows 'No active recommendations' — treating as an empty grid.");
-                return null;
             }
 
             if (DateTime.UtcNow - lastLog >= TimeSpan.FromSeconds(10))

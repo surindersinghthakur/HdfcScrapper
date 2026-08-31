@@ -230,7 +230,14 @@ public class ResearchDashboardScraper : IDisposable
                 return candidate;
             }
 
-            if (_driver.FindElements(By.XPath("//*[contains(text(),'No active rec')]")).Count > 0)
+            // contains(., ...) (not contains(text(), ...)) so this still matches even if the
+            // message text is split across nested tags (e.g. "No active <span>recommendations</span>"),
+            // which contains(text(), ...) would miss since it only sees direct text nodes.
+            // Case-insensitive via translate() since the exact capitalization isn't confirmed.
+            const string LowercaseMap = "abcdefghijklmnopqrstuvwxyz";
+            const string UppercaseMap = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            if (_driver.FindElements(By.XPath(
+                $"//*[contains(translate(., '{UppercaseMap}', '{LowercaseMap}'), 'no active rec')]")).Count > 0)
             {
                 Console.WriteLine("  Site shows 'No active recommendations' — treating as an empty grid.");
                 return null;

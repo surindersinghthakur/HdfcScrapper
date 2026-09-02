@@ -18,7 +18,7 @@ var emailSettings = configuration.GetSection("Email").Get<EmailSettings>() ?? ne
 var whatsAppSettings = configuration.GetSection("WhatsApp").Get<WhatsAppSettings>() ?? new WhatsAppSettings();
 
 var statePath = Path.Combine(AppContext.BaseDirectory, "data", "research-state.json");
-var pollInterval = TimeSpan.FromMinutes(1);
+var pollInterval = TimeSpan.FromSeconds(30);
 var useWhatsAppWeb = whatsAppSettings.Method.Equals("WebAutomation", StringComparison.OrdinalIgnoreCase);
 
 // Declared early (before the closures below capture it) but only actually created later,

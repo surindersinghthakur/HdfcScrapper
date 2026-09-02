@@ -96,10 +96,10 @@ public class ResearchDashboardScraper : IDisposable
         var assetClassTabText = AssetClassTabText;
         ClickAssetAndLiveTabs(assetClassTabText);
 
-        var gridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(25));
+        var gridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(15));
         if (gridRoot == null)
         {
-            Console.WriteLine($"No grid appeared within 25s for {assetClassTabText} — treating as empty.");
+            Console.WriteLine($"No grid appeared within 15s for {assetClassTabText} — treating as empty.");
             return new List<ResearchItem>();
         }
 
@@ -148,10 +148,10 @@ public class ResearchDashboardScraper : IDisposable
         // confirmed structurally identical to Options once it does load, so this is purely a
         // slow load, not a selector problem. Poll with visible progress instead of a single
         // silent wait, and skip Future for this cycle (rather than throw) if it never shows up.
-        var futureGridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(25));
+        var futureGridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(15));
         if (futureGridRoot == null)
         {
-            Console.WriteLine("  Future grid never appeared within 25s — skipping Future for this cycle.");
+            Console.WriteLine("  Future grid never appeared within 15s — skipping Future for this cycle.");
             return new List<ResearchItem>();
         }
 
@@ -527,10 +527,10 @@ public class ResearchDashboardScraper : IDisposable
             SelectFnoInstrumentType("Future");
         }
 
-        var gridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(25));
+        var gridRoot = WaitForGridRootWithProgress(TimeSpan.FromSeconds(15));
         if (gridRoot == null)
         {
-            Console.WriteLine($"  Grid never appeared within 25s — skipping detail fetch for {item.Symbol}.");
+            Console.WriteLine($"  Grid never appeared within 15s — skipping detail fetch for {item.Symbol}.");
             return;
         }
 

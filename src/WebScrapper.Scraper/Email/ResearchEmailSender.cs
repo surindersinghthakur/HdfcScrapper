@@ -20,6 +20,11 @@ public static class ResearchEmailSender
         message.Body = new TextPart("html") { Text = BuildHtml(added, removed) };
 
         using var client = new SmtpClient();
+        // Some machines/networks can't reach Gmail's certificate revocation-check servers
+        // (OCSP/CRL) -- the certificate itself is fine, but MailKit's TLS handshake fails on
+        // "revocation function was unable to check revocation" without this. Disables only the
+        // revocation check, not certificate validation itself.
+        client.CheckCertificateRevocation = false;
         client.Connect(settings.SmtpHost, settings.SmtpPort, SecureSocketOptions.StartTls);
         client.Authenticate(settings.SenderEmail, settings.SenderAppPassword);
         client.Send(message);
@@ -36,6 +41,11 @@ public static class ResearchEmailSender
         message.Body = new TextPart("plain") { Text = body };
 
         using var client = new SmtpClient();
+        // Some machines/networks can't reach Gmail's certificate revocation-check servers
+        // (OCSP/CRL) -- the certificate itself is fine, but MailKit's TLS handshake fails on
+        // "revocation function was unable to check revocation" without this. Disables only the
+        // revocation check, not certificate validation itself.
+        client.CheckCertificateRevocation = false;
         client.Connect(settings.SmtpHost, settings.SmtpPort, SecureSocketOptions.StartTls);
         client.Authenticate(settings.SenderEmail, settings.SenderAppPassword);
         client.Send(message);

@@ -3,9 +3,11 @@ bin/
 obj/
 *.user
 
-## Selenium / Chrome profile
-src/WebScrapper.Scraper/chrome-profile/
-src/WebScrapper.Scraper/whatsapp-profile/
+## Selenium / Chrome profile — unanchored so this also covers Runtime/ (a published build
+## generates its own chrome-profile/, whatsapp-profile/, and data/ next to the exe)
+chrome-profile/
+whatsapp-profile/
+Runtime/data/
 
 ## Local secrets - never commit real credentials
 appsettings.local.json
